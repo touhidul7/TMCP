@@ -14,7 +14,9 @@ export default function DashboardHeader({ title }) {
   return (
     <header className="h-16 border-b border-outline-variant bg-surface flex items-center justify-between px-6 sticky top-0 z-40">
       <div className="flex items-center gap-6">
-        <h2 className="text-base font-bold text-on-surface mr-4">{title || "TMCP Platform"}</h2>
+        <h2 className="text-base font-bold text-on-surface w-52 truncate" title={title || "TMCP Platform"}>
+          {title || "TMCP Platform"}
+        </h2>
         
         {/* Search */}
         <div className="relative hidden md:block">

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useMockStore } from "@/lib/mock-store";
+import logo from "../app/icon.png"
 import {
   LayoutDashboard,
   Puzzle,
@@ -19,6 +20,7 @@ import {
   FileText,
   LogOut
 } from "lucide-react";
+import Image from "next/image";
 
 const iconMap = {
   dashboard: LayoutDashboard,
@@ -57,12 +59,13 @@ export default function DashboardSidebar() {
       <div className="px-6 mb-8 space-y-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <div className="w-8 h-8 bg-primary rounded flex items-center justify-center glow-primary">
-              <Cpu className="w-4 h-4 text-on-primary" />
+            <div className="w-10 h-10  rounded flex items-center justify-center">
+              {/* <Cpu className="w-4 h-4 text-on-primary" /> */}
+              <Image src={logo} alt="TMCP Logo" width={24} height={24} />
             </div>
-            <h1 className="text-lg font-bold tracking-tight text-primary">TMCP Gateway</h1>
+            <h1 className="text-lg font-bold tracking-tight text-primary">TMCP</h1>
           </div>
-          <p className="font-mono text-xs text-on-surface-variant px-1">v2.4.0-stable</p>
+          {/* <p className="font-mono text-xs text-on-surface-variant px-1">v1.0.0</p> */}
         </div>
 
         {/* Workspace Switcher */}
