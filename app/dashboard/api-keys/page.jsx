@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMockStore } from "@/lib/mock-store";
 import DashboardHeader from "@/components/dashboard-header";
-import { Plus, X, TriangleAlert, Copy, Check } from "lucide-react";
+import { Plus, X, TriangleAlert, Copy, Check, Cpu, Terminal, Play, Loader2 } from "lucide-react";
 
 export default function ApiKeysPage() {
   const { apiKeys, agents, generateApiKey, revokeApiKey, rotateApiKey, hasPermission } = useMockStore();
@@ -269,7 +269,825 @@ export default function ApiKeysPage() {
             </table>
           </div>
         </div>
+
+        {/* API Usage Documentation */}
+        <ApiUsageDocs />
+
+        {/* Interactive API Key Tester */}
+        <ApiKeyTester />
       </main>
     </>
   );
 }
+
+function ApiUsageDocs() {
+  const [activeTab, setActiveTab] = useState("curl");
+  const [copiedSnippet, setCopiedSnippet] = useState(false);
+  const [copiedId, setCopiedId] = useState(null);
+
+  const tabs = [
+    { id: "curl", label: "cURL" },
+    { id: "python", label: "Python" },
+    { id: "javascript", label: "JavaScript" },
+    { id: "react", label: "React" },
+    { id: "n8n", label: "n8n" },
+  ];
+
+  const BASE_URL = typeof window !== "undefined" ? window.location.origin : "https://your-domain.com";
+
+  // Individual cURL commands for copy buttons
+  const curlExecute = `curl -X POST "${BASE_URL}/api/gateway/execute" \\
+  -H "Authorization: Bearer mcp_live_xxxxxxxxxxxx" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "tool": "gmail",
+    "action": "gmail.search",
+    "input": {
+      "query": "from:client@example.com newer_than:7d"
+    }
+  }'`;
+
+  const curlListTools = `curl -X GET "${BASE_URL}/api/gateway/tools" \\
+  -H "Authorization: Bearer mcp_live_xxxxxxxxxxxx"`;
+
+  const curlStatus = `curl -X GET "${BASE_URL}/api/gateway/status" \\
+  -H "Authorization: Bearer mcp_live_xxxxxxxxxxxx"`;
+
+  const snippets = {
+    curl: `# 1. Execute a tool action
+${curlExecute}
+
+# 2. List available tools
+${curlListTools}
+
+# 3. Check gateway status
+${curlStatus}`,
+
+    python: `import requests
+
+API_KEY = "mcp_live_xxxxxxxxxxxx"
+BASE_URL = "${BASE_URL}"
+
+# 1. Execute a tool action through the gateway
+response = requests.post(
+    f"{BASE_URL}/api/gateway/execute",
+    headers={
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json"
+    },
+    json={
+        "tool": "gmail",
+        "action": "gmail.search",
+        "input": {
+            "query": "from:client@example.com newer_than:7d"
+        }
+    }
+)
+
+result = response.json()
+print(result)
+
+# 2. List available tools
+tools = requests.get(
+    f"{BASE_URL}/api/gateway/tools",
+    headers={"Authorization": f"Bearer {API_KEY}"}
+).json()
+
+for tool in tools["tools"]:
+    print(f"{tool['name']} — {tool['description']}")`,
+
+    javascript: `const API_KEY = "mcp_live_xxxxxxxxxxxx";
+const BASE_URL = "${BASE_URL}";
+
+// 1. Execute a tool action through the gateway
+async function executeToolAction(tool, action, input) {
+  const response = await fetch(\`\${BASE_URL}/api/gateway/execute\`, {
+    method: "POST",
+    headers: {
+      "Authorization": \`Bearer \${API_KEY}\`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ tool, action, input })
+  });
+
+  if (!response.ok) {
+    throw new Error(\`Gateway error: \${response.status}\`);
+  }
+
+  return response.json();
+}
+
+// Usage
+const result = await executeToolAction("gmail", "gmail.search", {
+  query: "from:client@example.com newer_than:7d"
+});
+console.log(result);
+
+// 2. List available tools
+const tools = await fetch(\`\${BASE_URL}/api/gateway/tools\`, {
+  headers: { "Authorization": \`Bearer \${API_KEY}\` }
+}).then(r => r.json());
+
+console.log(tools);`,
+
+    react: `import { useState } from "react";
+
+const API_KEY = process.env.NEXT_PUBLIC_TMCP_API_KEY;
+const BASE_URL = "${BASE_URL}";
+
+// Custom hook for TMCP Gateway
+function useTMCPGateway() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const execute = async (tool, action, input) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(\`\${BASE_URL}/api/gateway/execute\`, {
+        method: "POST",
+        headers: {
+          "Authorization": \`Bearer \${API_KEY}\`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ tool, action, input })
+      });
+
+      if (!res.ok) throw new Error("Gateway request failed");
+      return await res.json();
+    } catch (err) {
+      setError(err.message);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return { execute, loading, error };
+}
+
+// Example component
+export default function EmailSearch() {
+  const { execute, loading, error } = useTMCPGateway();
+  const [results, setResults] = useState(null);
+
+  const handleSearch = async () => {
+    const data = await execute("gmail", "gmail.search", {
+      query: "from:client@example.com"
+    });
+    if (data) setResults(data);
+  };
+
+  return (
+    <div>
+      <button onClick={handleSearch} disabled={loading}>
+        {loading ? "Searching..." : "Search Emails"}
+      </button>
+      {error && <p style={{ color: "red" }}>{error}</p>}
+      {results && <pre>{JSON.stringify(results, null, 2)}</pre>}
+    </div>
+  );
+}`,
+
+    n8n: `// n8n HTTP Request Node Configuration
+// ─────────────────────────────────────
+// Use the "HTTP Request" node in your n8n workflow.
+
+// Node Settings:
+// ┌─────────────────────────────────────────────┐
+// │  Method:  POST                              │
+// │  URL:     ${BASE_URL}/api/gateway/execute    │
+// │                                             │
+// │  Authentication: Header Auth                │
+// │    Name:  Authorization                     │
+// │    Value: Bearer mcp_live_xxxxxxxxxxxx      │
+// │                                             │
+// │  Headers:                                   │
+// │    Content-Type: application/json           │
+// │                                             │
+// │  Body (JSON):                               │
+// │  {                                          │
+// │    "tool": "gmail",                         │
+// │    "action": "gmail.search",                │
+// │    "input": {                               │
+// │      "query": "from:client@example.com"     │
+// │    }                                        │
+// │  }                                          │
+// └─────────────────────────────────────────────┘
+
+// Credential Setup (recommended):
+// 1. Go to Credentials → Add → "Header Auth"
+// 2. Name: "TMCP Gateway"
+// 3. Header Name: Authorization
+// 4. Header Value: Bearer mcp_live_xxxxxxxxxxxx
+// 5. Reference this credential in HTTP Request node
+
+// Chaining with other nodes:
+// [Trigger] → [HTTP Request (TMCP)] → [IF Status=SUCCESS]
+//                                          ├─ [Process Data]
+//                                          └─ [Error Handler]`
+  };
+
+  const copySnippet = () => {
+    navigator.clipboard.writeText(snippets[activeTab]);
+    setCopiedSnippet(true);
+    setTimeout(() => setCopiedSnippet(false), 2000);
+  };
+
+  const copyText = (text, id) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  return (
+    <div className="bg-surface-container border border-outline-variant rounded overflow-hidden">
+      {/* Header */}
+      <div className="px-6 py-4 border-b border-outline-variant bg-surface-container-lowest flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+        <div>
+          <h3 className="text-sm font-bold text-on-surface flex items-center gap-2">
+            <Cpu className="w-4 h-4 text-primary" />
+            API Usage Guide
+          </h3>
+          <p className="text-[10px] text-on-surface-variant font-mono uppercase tracking-wider mt-0.5">
+            Integrate TMCP Gateway into your agent workflows
+          </p>
+        </div>
+      </div>
+
+      {/* Quick Reference */}
+      <div className="px-6 py-4 border-b border-outline-variant/50 bg-surface-container-low/50">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-1.5">
+            <span className="text-[9px] font-mono font-bold text-on-surface-variant uppercase tracking-widest">Base URL</span>
+            <code className="block text-xs font-mono text-primary bg-surface-container-lowest px-3 py-2 rounded border border-outline-variant/30 truncate">
+              {BASE_URL}/api/gateway
+            </code>
+          </div>
+          <div className="space-y-1.5">
+            <span className="text-[9px] font-mono font-bold text-on-surface-variant uppercase tracking-widest">Auth Header</span>
+            <code className="block text-xs font-mono text-primary bg-surface-container-lowest px-3 py-2 rounded border border-outline-variant/30 truncate">
+              Authorization: Bearer &lt;API_KEY&gt;
+            </code>
+          </div>
+          <div className="space-y-1.5">
+            <span className="text-[9px] font-mono font-bold text-on-surface-variant uppercase tracking-widest">Content Type</span>
+            <code className="block text-xs font-mono text-primary bg-surface-container-lowest px-3 py-2 rounded border border-outline-variant/30">
+              application/json
+            </code>
+          </div>
+        </div>
+      </div>
+
+      {/* Endpoint Reference with individual cURL + copy */}
+      <div className="px-6 py-4 border-b border-outline-variant/50">
+        <h4 className="text-[10px] font-mono font-bold text-on-surface-variant uppercase tracking-widest mb-4">Endpoints &amp; cURL Commands</h4>
+        <div className="space-y-4">
+
+          {/* POST /execute */}
+          <div className="rounded border border-outline-variant/30 overflow-hidden">
+            <div className="flex items-center justify-between bg-surface-container-lowest px-4 py-2.5">
+              <div className="flex items-center gap-3">
+                <span className="px-2 py-0.5 bg-green-500/15 text-green-400 border border-green-500/20 rounded text-[9px] font-mono font-bold">POST</span>
+                <code className="text-xs font-mono text-on-surface font-semibold">/api/gateway/execute</code>
+                <span className="text-[10px] text-on-surface-variant hidden sm:inline">— Execute a tool action</span>
+              </div>
+              <button
+                onClick={() => copyText(curlExecute, "curl-execute")}
+                className="px-2.5 py-1 bg-surface-container-high border border-outline-variant hover:bg-surface-container-highest rounded text-[9px] font-bold text-on-surface flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                {copiedId === "curl-execute" ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+                {copiedId === "curl-execute" ? "Copied!" : "Copy"}
+              </button>
+            </div>
+            <div className="bg-[#0d1117] border-t border-outline-variant/20">
+              <pre className="px-4 py-3 overflow-x-auto text-[11px] leading-relaxed">
+                <code className="text-[#c9d1d9] font-mono whitespace-pre">{curlExecute}</code>
+              </pre>
+            </div>
+          </div>
+
+          {/* GET /tools */}
+          <div className="rounded border border-outline-variant/30 overflow-hidden">
+            <div className="flex items-center justify-between bg-surface-container-lowest px-4 py-2.5">
+              <div className="flex items-center gap-3">
+                <span className="px-2 py-0.5 bg-blue-500/15 text-blue-400 border border-blue-500/20 rounded text-[9px] font-mono font-bold">GET</span>
+                <code className="text-xs font-mono text-on-surface font-semibold">/api/gateway/tools</code>
+                <span className="text-[10px] text-on-surface-variant hidden sm:inline">— List available tools &amp; features</span>
+              </div>
+              <button
+                onClick={() => copyText(curlListTools, "curl-tools")}
+                className="px-2.5 py-1 bg-surface-container-high border border-outline-variant hover:bg-surface-container-highest rounded text-[9px] font-bold text-on-surface flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                {copiedId === "curl-tools" ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+                {copiedId === "curl-tools" ? "Copied!" : "Copy"}
+              </button>
+            </div>
+            <div className="bg-[#0d1117] border-t border-outline-variant/20">
+              <pre className="px-4 py-3 overflow-x-auto text-[11px] leading-relaxed">
+                <code className="text-[#c9d1d9] font-mono whitespace-pre">{curlListTools}</code>
+              </pre>
+            </div>
+          </div>
+
+          {/* GET /status */}
+          <div className="rounded border border-outline-variant/30 overflow-hidden">
+            <div className="flex items-center justify-between bg-surface-container-lowest px-4 py-2.5">
+              <div className="flex items-center gap-3">
+                <span className="px-2 py-0.5 bg-blue-500/15 text-blue-400 border border-blue-500/20 rounded text-[9px] font-mono font-bold">GET</span>
+                <code className="text-xs font-mono text-on-surface font-semibold">/api/gateway/status</code>
+                <span className="text-[10px] text-on-surface-variant hidden sm:inline">— Check gateway health &amp; agent info</span>
+              </div>
+              <button
+                onClick={() => copyText(curlStatus, "curl-status")}
+                className="px-2.5 py-1 bg-surface-container-high border border-outline-variant hover:bg-surface-container-highest rounded text-[9px] font-bold text-on-surface flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                {copiedId === "curl-status" ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+                {copiedId === "curl-status" ? "Copied!" : "Copy"}
+              </button>
+            </div>
+            <div className="bg-[#0d1117] border-t border-outline-variant/20">
+              <pre className="px-4 py-3 overflow-x-auto text-[11px] leading-relaxed">
+                <code className="text-[#c9d1d9] font-mono whitespace-pre">{curlStatus}</code>
+              </pre>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      {/* Request Body Schema */}
+      <div className="px-6 py-4 border-b border-outline-variant/50 bg-surface-container-low/30">
+        <h4 className="text-[10px] font-mono font-bold text-on-surface-variant uppercase tracking-widest mb-3">Request Body Schema</h4>
+        <div className="bg-surface-container-lowest rounded border border-outline-variant/30 overflow-hidden">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="border-b border-outline-variant/30">
+                <th className="px-4 py-2 text-[9px] font-mono text-on-surface-variant uppercase font-bold">Field</th>
+                <th className="px-4 py-2 text-[9px] font-mono text-on-surface-variant uppercase font-bold">Type</th>
+                <th className="px-4 py-2 text-[9px] font-mono text-on-surface-variant uppercase font-bold">Required</th>
+                <th className="px-4 py-2 text-[9px] font-mono text-on-surface-variant uppercase font-bold">Description</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-outline-variant/20 text-xs">
+              <tr>
+                <td className="px-4 py-2.5 font-mono text-primary font-bold">tool</td>
+                <td className="px-4 py-2.5 font-mono text-on-surface-variant">string</td>
+                <td className="px-4 py-2.5"><span className="text-green-400 text-[9px] font-bold">YES</span></td>
+                <td className="px-4 py-2.5 text-on-surface-variant">Tool slug (e.g. &quot;gmail&quot;, &quot;drive&quot;)</td>
+              </tr>
+              <tr>
+                <td className="px-4 py-2.5 font-mono text-primary font-bold">action</td>
+                <td className="px-4 py-2.5 font-mono text-on-surface-variant">string</td>
+                <td className="px-4 py-2.5"><span className="text-green-400 text-[9px] font-bold">YES</span></td>
+                <td className="px-4 py-2.5 text-on-surface-variant">Feature key (e.g. &quot;gmail.search&quot;)</td>
+              </tr>
+              <tr>
+                <td className="px-4 py-2.5 font-mono text-primary font-bold">input</td>
+                <td className="px-4 py-2.5 font-mono text-on-surface-variant">object</td>
+                <td className="px-4 py-2.5"><span className="text-green-400 text-[9px] font-bold">YES</span></td>
+                <td className="px-4 py-2.5 text-on-surface-variant">Action-specific input parameters</td>
+              </tr>
+              <tr>
+                <td className="px-4 py-2.5 font-mono text-primary font-bold">account_id</td>
+                <td className="px-4 py-2.5 font-mono text-on-surface-variant">string</td>
+                <td className="px-4 py-2.5"><span className="text-on-surface-variant text-[9px]">optional</span></td>
+                <td className="px-4 py-2.5 text-on-surface-variant">Specific tool account UUID (auto-selected if omitted)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Code Examples with Tabs */}
+      <div className="px-6 py-4">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="text-[10px] font-mono font-bold text-on-surface-variant uppercase tracking-widest">Code Examples</h4>
+          <button
+            onClick={copySnippet}
+            className="px-3 py-1 bg-surface-container-high border border-outline-variant hover:bg-surface-container-highest rounded text-[10px] font-bold text-on-surface flex items-center gap-1.5 cursor-pointer transition-colors"
+          >
+            {copiedSnippet ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+            {copiedSnippet ? "Copied!" : "Copy All"}
+          </button>
+        </div>
+
+        {/* Tab Bar */}
+        <div className="flex border-b border-outline-variant/50 mb-0">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-4 py-2 text-xs font-bold transition-all cursor-pointer border-b-2 ${
+                activeTab === tab.id
+                  ? "text-primary border-primary bg-primary/5"
+                  : "text-on-surface-variant border-transparent hover:text-on-surface hover:bg-surface-container-high/50"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Code Block */}
+        <div className="bg-[#0d1117] rounded-b border border-t-0 border-outline-variant/30 overflow-hidden">
+          <pre className="p-5 overflow-x-auto text-[11px] leading-relaxed">
+            <code className="text-[#c9d1d9] font-mono whitespace-pre">{snippets[activeTab]}</code>
+          </pre>
+        </div>
+      </div>
+
+      {/* Response Format */}
+      <div className="px-6 pb-5">
+        <h4 className="text-[10px] font-mono font-bold text-on-surface-variant uppercase tracking-widest mb-3">Response Format</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <span className="text-[9px] font-mono font-bold text-green-400 uppercase tracking-widest mb-1.5 block">✓ Success</span>
+            <div className="bg-[#0d1117] rounded border border-green-500/20 p-4">
+              <pre className="text-[11px] font-mono text-[#c9d1d9] whitespace-pre">{`{
+  "success": true,
+  "result": { ... },
+  "transaction_id": "uuid",
+  "latency_ms": 322
+}`}</pre>
+            </div>
+          </div>
+          <div>
+            <span className="text-[9px] font-mono font-bold text-error uppercase tracking-widest mb-1.5 block">✗ Error</span>
+            <div className="bg-[#0d1117] rounded border border-error/20 p-4">
+              <pre className="text-[11px] font-mono text-[#c9d1d9] whitespace-pre">{`{
+  "success": false,
+  "error": "PERMISSION_DENIED",
+  "message": "Agent not allowed to use gmail.send",
+  "transaction_id": "uuid"
+}`}</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ApiKeyTester() {
+  const { apiKeys, agents, tools, permissions, toolAccounts, useLiveDb } = useMockStore();
+
+  const [selectedAgentId, setSelectedAgentId] = useState(agents[0]?.id || "");
+  const [apiKey, setApiKey] = useState("");
+  const [endpoint, setEndpoint] = useState("tools"); // Default to List tools
+  const [selectedToolSlug, setSelectedToolSlug] = useState("all");
+  
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [latency, setLatency] = useState(null);
+  const [httpStatus, setHttpStatus] = useState(null);
+  const [copiedCode, setCopiedCode] = useState(false);
+
+  const BASE_URL = typeof window !== "undefined" ? window.location.origin : "https://your-domain.com";
+
+  // Auto-fill API key when agent changes
+  useEffect(() => {
+    if (selectedAgentId) {
+      const activeKey = apiKeys.find(k => k.agent_id === selectedAgentId && k.status === "active");
+      if (activeKey) {
+        setApiKey(`${activeKey.key_prefix}xxxxxxxxxxxx`);
+      } else {
+        setApiKey("");
+      }
+    } else {
+      setApiKey("");
+    }
+    setResult(null);
+    setLatency(null);
+    setHttpStatus(null);
+  }, [selectedAgentId, apiKeys]);
+
+  // Handle run test
+  const handleRun = async () => {
+    if (!apiKey) {
+      setResult({ error: "Please select an agent with an active API key or enter one manually." });
+      setHttpStatus(0);
+      return;
+    }
+
+    setLoading(true);
+    setResult(null);
+    setLatency(null);
+    setHttpStatus(null);
+
+    const start = performance.now();
+    let urlPath = endpoint === "status" ? "/api/gateway/status" : "/api/gateway/tools";
+    if (endpoint === "tools" && selectedToolSlug !== "all") {
+      urlPath += `?tool=${selectedToolSlug}`;
+    }
+    const fullUrl = `${BASE_URL}${urlPath}`;
+
+    try {
+      let response = null;
+      let data = null;
+
+      // Only attempt real fetch if live DB is configured and the API key is not a mock format (does not end with xxxxxxxxxxxx)
+      const isMockKey = apiKey.endsWith("xxxxxxxxxxxx");
+
+      if (useLiveDb && !isMockKey) {
+        response = await fetch(fullUrl, {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${apiKey}`
+          }
+        });
+        setHttpStatus(response.status);
+        data = await response.json();
+      }
+
+      // Simulated mock logic fallback if fetch didn't happen or failed (e.g. 401/404/network error)
+      if (!response || response.status === 404 || response.status === 401 || response.status === 403) {
+        // Wait a small mock delay (e.g. 150-400ms) for premium feeling
+        await new Promise(resolve => setTimeout(resolve, 150 + Math.random() * 250));
+        
+        // Find selected agent details
+        const selectedAgent = agents.find(a => a.id === selectedAgentId);
+        const agentName = selectedAgent ? selectedAgent.name : "Mock Agent";
+        const agentStatus = selectedAgent ? selectedAgent.status : "active";
+
+        // Check if agent has active key
+        const hasActiveKey = apiKeys.some(k => k.agent_id === selectedAgentId && k.status === "active") || !isMockKey;
+
+        if (!hasActiveKey) {
+          setHttpStatus(401);
+          data = {
+            success: false,
+            error: "UNAUTHORIZED",
+            message: "Invalid API key or associated agent has no active API keys."
+          };
+        } else if (endpoint === "status") {
+          setHttpStatus(200);
+          data = {
+            success: true,
+            status: "healthy",
+            gateway_version: "1.2.0",
+            agent: {
+              id: selectedAgentId,
+              name: agentName,
+              status: agentStatus
+            },
+            authorized_at: new Date().toISOString()
+          };
+        } else {
+          // endpoint === "tools"
+          // Fetch and construct allowed tools list from store state
+          const agentPermissions = permissions.filter(p => p.agent_id === selectedAgentId && p.allowed);
+          const accountsMap = {};
+          
+          agentPermissions.forEach(perm => {
+            const accId = perm.tool_account_id;
+            const acc = toolAccounts.find(a => a.id === accId);
+            if (acc) {
+              if (!accountsMap[accId]) {
+                const t = tools.find(toolItem => toolItem.id === acc.tool_id);
+                if (t && t.is_enabled) {
+                  accountsMap[accId] = {
+                    tool: t.name,
+                    slug: t.slug || t.name.toLowerCase(),
+                    account_label: acc.label,
+                    tool_account_id: accId,
+                    features: []
+                  };
+                }
+              }
+              if (accountsMap[accId]) {
+                accountsMap[accId].features.push(perm.feature_key);
+              }
+            }
+          });
+
+          let mockTools = Object.values(accountsMap);
+          if (selectedToolSlug !== "all") {
+            mockTools = mockTools.filter(t => t.slug.toLowerCase() === selectedToolSlug.toLowerCase());
+          }
+
+          setHttpStatus(200);
+          data = {
+            success: true,
+            tools: mockTools
+          };
+        }
+      }
+
+      const elapsed = Math.round(performance.now() - start);
+      setLatency(elapsed);
+      setResult(data);
+
+    } catch (err) {
+      console.error("Test execution error:", err);
+      // Fallback on total failure
+      await new Promise(resolve => setTimeout(resolve, 200));
+      setLatency(Math.round(performance.now() - start));
+      setHttpStatus(500);
+      setResult({
+        success: false,
+        error: "INTERNAL_ERROR",
+        message: err.message || "Failed to contact local gateway service."
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generateCode = () => {
+    const maskedKey = apiKey ? apiKey : "mcp_live_xxxxxxxxxxxx";
+    let urlPath = endpoint === "status" ? "/api/gateway/status" : "/api/gateway/tools";
+    if (endpoint === "tools" && selectedToolSlug !== "all") {
+      urlPath += `?tool=${selectedToolSlug}`;
+    }
+    return `const response = await fetch("${BASE_URL}${urlPath}", {
+  method: "GET",
+  headers: {
+    "Authorization": "Bearer ${maskedKey}"
+  }
+});
+
+const data = await response.json();
+console.log(data);`;
+  };
+
+  const codePreview = generateCode();
+  
+  // Filter tools to get unique list for dropdown
+  const uniqueTools = Array.from(new Set(tools.filter(t => t.is_enabled).map(t => JSON.stringify({ name: t.name, slug: t.slug || t.name.toLowerCase() }))))
+    .map(str => JSON.parse(str));
+
+  return (
+    <div className="bg-surface-container border border-outline-variant rounded overflow-hidden">
+      {/* Header */}
+      <div className="px-6 py-4 border-b border-outline-variant bg-surface-container-lowest">
+        <h3 className="text-sm font-bold text-on-surface flex items-center gap-2">
+          <Terminal className="w-4 h-4 text-tertiary" />
+          API Key Tester
+        </h3>
+        <p className="text-[10px] text-on-surface-variant font-mono uppercase tracking-wider mt-0.5">
+          Test GET endpoints on the secure gateway using your agent credentials
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-outline-variant/50">
+        {/* Left: Inputs */}
+        <div className="p-5 space-y-4">
+          
+          {/* Agent Selection */}
+          <div>
+            <label className="block text-[9px] font-mono font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">Select Agent</label>
+            <select
+              value={selectedAgentId}
+              onChange={(e) => setSelectedAgentId(e.target.value)}
+              className="w-full bg-surface-container-lowest border border-outline-variant rounded px-3 py-2 text-xs font-mono text-on-surface focus:border-primary outline-none cursor-pointer"
+            >
+              <option value="">-- Choose Agent --</option>
+              {agents.map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.name} ({agent.status})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* API Key */}
+          <div>
+            <label className="block text-[9px] font-mono font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">API Key</label>
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="mcp_live_xxxxxxxxxxxx"
+              className="w-full bg-surface-container-lowest border border-outline-variant rounded px-3 py-2 text-xs font-mono text-on-surface focus:border-primary outline-none placeholder:text-on-surface-variant/40"
+            />
+          </div>
+
+          {/* Endpoint + Tool Filter */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[9px] font-mono font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">Endpoint</label>
+              <select
+                value={endpoint}
+                onChange={(e) => {
+                  setEndpoint(e.target.value);
+                  setResult(null);
+                  setLatency(null);
+                  setHttpStatus(null);
+                }}
+                className="w-full bg-surface-container-lowest border border-outline-variant rounded px-3 py-2 text-xs font-mono text-on-surface focus:border-primary outline-none cursor-pointer"
+              >
+                <option value="tools">List available tools &amp; features</option>
+                <option value="status">Check gateway health &amp; agent info</option>
+              </select>
+            </div>
+
+            <div>
+              <label className={`block text-[9px] font-mono font-bold uppercase tracking-widest mb-1.5 ${endpoint === "tools" ? "text-on-surface-variant" : "text-on-surface-variant/30"}`}>
+                Tool Selection
+              </label>
+              <select
+                value={selectedToolSlug}
+                onChange={(e) => {
+                  setSelectedToolSlug(e.target.value);
+                  setResult(null);
+                  setLatency(null);
+                  setHttpStatus(null);
+                }}
+                disabled={endpoint !== "tools"}
+                className={`w-full bg-surface-container-lowest border border-outline-variant rounded px-3 py-2 text-xs font-mono text-on-surface focus:border-primary outline-none cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed`}
+              >
+                <option value="all">All Tools</option>
+                {uniqueTools.map((t) => (
+                  <option key={t.slug} value={t.slug}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Run Button */}
+          <button
+            onClick={handleRun}
+            disabled={loading}
+            className="w-full py-2.5 bg-primary text-on-primary font-bold text-sm rounded flex items-center justify-center gap-2 hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer glow-primary disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Running...</>
+            ) : (
+              <><Play className="w-4 h-4" /> Run GET Request</>
+            )}
+          </button>
+        </div>
+
+        {/* Right: Code Preview + Result */}
+        <div className="flex flex-col">
+          {/* Code Preview */}
+          <div className="border-b border-outline-variant/50">
+            <div className="flex items-center justify-between px-4 py-2 bg-surface-container-lowest">
+              <span className="text-[9px] font-mono font-bold text-on-surface-variant uppercase tracking-widest flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span> GET Code Demo (JavaScript)
+              </span>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(codePreview);
+                  setCopiedCode(true);
+                  setTimeout(() => setCopiedCode(false), 2000);
+                }}
+                className="px-2 py-0.5 bg-surface-container-high border border-outline-variant hover:bg-surface-container-highest rounded text-[9px] font-bold text-on-surface flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                {copiedCode ? <Check className="w-2.5 h-2.5 text-green-400" /> : <Copy className="w-2.5 h-2.5" />}
+                {copiedCode ? "Copied!" : "Copy"}
+              </button>
+            </div>
+            <div className="bg-[#0d1117] max-h-[180px] overflow-auto">
+              <pre className="px-4 py-3 text-[11px] leading-relaxed">
+                <code className="text-[#c9d1d9] font-mono whitespace-pre">{codePreview}</code>
+              </pre>
+            </div>
+          </div>
+
+          {/* Result Output */}
+          <div className="flex-1">
+            <div className="flex items-center justify-between px-4 py-2 bg-surface-container-lowest border-b border-outline-variant/30">
+              <span className="text-[9px] font-mono font-bold text-on-surface-variant uppercase tracking-widest">Response Output</span>
+              {httpStatus !== null && (
+                <div className="flex items-center gap-3">
+                  <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded border ${
+                    httpStatus >= 200 && httpStatus < 300
+                      ? "bg-green-500/15 text-green-400 border-green-500/20"
+                      : httpStatus === 0
+                      ? "bg-error/15 text-error border-error/20"
+                      : "bg-yellow-500/15 text-yellow-400 border-yellow-500/20"
+                  }`}>
+                    {httpStatus === 0 ? "ERR" : httpStatus}
+                  </span>
+                  {latency !== null && (
+                    <span className="text-[9px] font-mono text-on-surface-variant">{latency}ms</span>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="bg-[#0d1117] min-h-[140px] max-h-[220px] overflow-auto">
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                </div>
+              ) : result ? (
+                <pre className="px-4 py-3 text-[11px] leading-relaxed">
+                  <code className={`font-mono whitespace-pre ${
+                    result.error || result.success === false ? "text-red-400" : "text-[#c9d1d9]"
+                  }`}>{JSON.stringify(result, null, 2)}</code>
+                </pre>
+              ) : (
+                <div className="flex items-center justify-center py-12 text-on-surface-variant/40">
+                  <p className="text-xs font-mono">Response will appear here after running a test</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+

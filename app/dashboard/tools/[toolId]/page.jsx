@@ -17,7 +17,8 @@ export default function ToolDetailPage({ params }) {
     disconnectToolAccount, 
     logs,
     hasPermission,
-    user
+    user,
+    agents
   } = useMockStore();
 
   const [showAddAccount, setShowAddAccount] = useState(false);
@@ -385,7 +386,7 @@ export default function ToolDetailPage({ params }) {
                 {toolLogs.map((log) => (
                   <div key={log.id} className="p-3 bg-surface-container-low border border-outline-variant/40 rounded flex flex-col justify-between gap-1 text-[11px]">
                     <div className="flex justify-between items-center font-mono text-[10px]">
-                      <span className="text-on-surface-variant">{log.timestamp.slice(11, 19)}</span>
+                      <span className="text-on-surface-variant">{(log.timestamp || log.created_at || "").slice(11, 19)}</span>
                       <span className={`px-1.5 py-0.1 rounded text-[8px] font-bold ${
                         log.status === "SUCCESS" 
                           ? "bg-green-500/10 text-green-400" 
@@ -395,7 +396,7 @@ export default function ToolDetailPage({ params }) {
                       </span>
                     </div>
                     
-                    <p className="text-on-surface font-semibold">{log.agent_name}</p>
+                    <p className="text-on-surface font-semibold">{log.agent_name || agents.find(a => a.id === log.agent_id)?.name || "System"}</p>
                     <code className="text-on-surface-variant font-mono text-[9px] truncate bg-surface-container-lowest px-1 rounded py-0.5">{JSON.stringify(log.input)}</code>
                   </div>
                 ))}

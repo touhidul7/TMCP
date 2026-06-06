@@ -9,7 +9,7 @@ import { Puzzle, Network, Bot, KeyRound, TriangleAlert, ClipboardCheck, Cloud, D
 
 export default function DashboardOverview() {
   const router = useRouter();
-  const { getWorkspaceStats, user, approvals } = useMockStore();
+  const { getWorkspaceStats, user, approvals, agents } = useMockStore();
   const [stats, setStats] = useState(null);
   const [toastVisible, setToastVisible] = useState(false);
 
@@ -200,13 +200,13 @@ export default function DashboardOverview() {
                 <tbody className="divide-y divide-outline-variant/30">
                   {stats.recentLogs.map((log) => (
                     <tr key={log.id} className="hover:bg-surface-container-highest/20 transition-colors">
-                      <td className="px-6 py-3.5 font-mono text-[11px] text-on-surface-variant">{log.timestamp.slice(11, 19)}</td>
+                      <td className="px-6 py-3.5 font-mono text-[11px] text-on-surface-variant">{(log.timestamp || log.created_at || "").slice(11, 19)}</td>
                       <td className="px-6 py-3.5">
                         <div className="flex items-center gap-2">
                           <span className="bg-primary/10 p-1 rounded-full flex items-center justify-center">
                             <Bot className="text-primary w-3 h-3" />
                           </span>
-                          <span className="text-xs font-semibold text-on-surface">{log.agent_name}</span>
+                          <span className="text-xs font-semibold text-on-surface">{log.agent_name || agents.find(a => a.id === log.agent_id)?.name || "System"}</span>
                         </div>
                       </td>
                       <td className="px-6 py-3.5 text-xs text-on-surface-variant">
