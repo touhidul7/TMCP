@@ -22,11 +22,11 @@ export default function ApiKeysPage() {
     return agents.find((a) => a.id === id)?.name || "Unknown Agent";
   };
 
-  const handleCreateKey = (e) => {
+  const handleCreateKey = async (e) => {
     e.preventDefault();
     if (!keyName || !agentId) return;
 
-    const res = generateApiKey(agentId, keyName, parseInt(expiryDays) || null);
+    const res = await generateApiKey(agentId, keyName, parseInt(expiryDays) || null);
     if (res.error) {
       alert(res.error);
     } else {
@@ -36,15 +36,15 @@ export default function ApiKeysPage() {
     }
   };
 
-  const handleRevoke = (keyId) => {
+  const handleRevoke = async (keyId) => {
     if (confirm("Are you sure you want to revoke this API key? This action is permanent and cannot be undone.")) {
-      revokeApiKey(keyId);
+      await revokeApiKey(keyId);
     }
   };
 
-  const handleRotate = (keyId) => {
+  const handleRotate = async (keyId) => {
     if (confirm("Are you sure you want to rotate this key? Any script using the old key will stop working immediately.")) {
-      const res = rotateApiKey(keyId);
+      const res = await rotateApiKey(keyId);
       if (res.error) {
         alert(res.error);
       } else {
