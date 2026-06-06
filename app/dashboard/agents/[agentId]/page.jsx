@@ -39,19 +39,28 @@ export default function AgentDetailPage({ params }) {
   };
 
   const getPermission = (accountId, featureKey) => {
-    const permId = `${agent.id}-${accountId}-${featureKey}`;
-    const found = permissions.find((p) => p.id === permId);
-    
-    // Default values if no permission record yet
+    // Match on actual DB fields (agent_id, tool_account_id, feature_key)
+    // because real DB rows have UUID ids, not composite strings
+    const found = permissions.find(
+      (p) =>
+        (p.agent_id === agent.id || p.id === `${agent.id}-${accountId}-${featureKey}`) &&
+        (p.tool_account_id === accountId || p.id === `${agent.id}-${accountId}-${featureKey}`) &&
+        p.feature_key === featureKey
+    );
+
     if (!found) {
       const feature = features.find((f) => f.feature_key === featureKey);
       return {
+        id: null,
+        agent_id: agent.id,
+        tool_account_id: accountId,
+        feature_key: featureKey,
         allowed: false,
         daily_limit: 100,
         require_approval: feature?.requires_approval || false
       };
     }
-    
+
     return found;
   };
 

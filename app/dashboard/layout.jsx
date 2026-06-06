@@ -2,24 +2,43 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useMockStore } from "@/lib/mock-store";
+import { supabase } from "@/lib/supabase/client";
 import DashboardSidebar from "@/components/dashboard-sidebar";
 
 export default function DashboardLayout({ children }) {
   const router = useRouter();
-  const { user } = useMockStore();
-  const [mounted, setMounted] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
-    setMounted(true);
-    // Check if user is present in localStorage or state
-    const savedUser = localStorage.getItem("tmcp_user");
-    if (!savedUser && !user) {
-      router.push("/login");
-    }
-  }, [user, router]);
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push("/login");
+      } else {
+        setUser(session.user);
+      }
+      setLoading(false);
+    };
 
-  if (!mounted || (!user && !localStorage.getItem("tmcp_user"))) {
+    checkUser();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (!session) {
+          router.push("/login");
+        } else {
+          setUser(session.user);
+        }
+      }
+    );
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, [router]);
+
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
         <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>

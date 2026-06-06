@@ -1,37 +1,28 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { useMockStore } from "@/lib/mock-store";
 import { Network } from "lucide-react";
 
 export default function LoginPage() {
-  const router = useRouter();
-  const { handleLogin } = useMockStore();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [role, setRole] = useState("Owner");
-  const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!email) {
-      setError("Email is required");
-      return;
+  const handleOAuthLogin = async (provider) => {
+    setError("");
+    setIsLoading(true);
+    try {
+      const { supabase } = await import("@/lib/supabase/client");
+      const { error: oauthErr } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: `${window.location.origin}/api/auth/callback`
+        }
+      });
+      if (oauthErr) throw oauthErr;
+    } catch (err) {
+      setError(err.message || `Failed to sign in with ${provider}`);
+      setIsLoading(false);
     }
-    
-    const loggedUser = handleLogin(email, password);
-    if (isSignUp) {
-      // Create owner-level workspace by default
-      loggedUser.role = "Owner";
-    } else {
-      loggedUser.role = role;
-    }
-    // Update local storage role
-    localStorage.setItem("tmcp_user", JSON.stringify(loggedUser));
-
-    router.push("/dashboard");
   };
 
   return (
@@ -46,10 +37,10 @@ export default function LoginPage() {
             <Network className="text-on-primary w-5 h-5" />
           </div>
           <h2 className="text-2xl font-bold tracking-tight text-on-surface text-center">
-            {isSignUp ? "Create new Workspace" : "Sign in to TMCP Gateway"}
+            Sign in to TMCP Gateway
           </h2>
-          <p className="mt-2 text-xs text-on-surface-variant font-mono">
-            {isSignUp ? "Become the Workspace Owner" : "Select credentials to access Dashboard"}
+          <p className="mt-2 text-xs text-on-surface-variant font-mono text-center">
+            Continue with your provider to access the Dashboard
           </p>
         </div>
 
@@ -59,75 +50,42 @@ export default function LoginPage() {
           </div>
         )}
 
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-on-surface-variant mb-1 font-mono uppercase tracking-wider">
-                Email Address
-              </label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-surface-container-lowest border border-outline-variant rounded px-3 py-2 text-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all placeholder:text-outline/50"
-                placeholder="admin@tmcp.io"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-on-surface-variant mb-1 font-mono uppercase tracking-wider">
-                Password
-              </label>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-surface-container-lowest border border-outline-variant rounded px-3 py-2 text-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all placeholder:text-outline/50"
-                placeholder="••••••••"
-              />
-            </div>
-
-            {!isSignUp && (
-              <div>
-                <label className="block text-xs font-semibold text-on-surface-variant mb-1 font-mono uppercase tracking-wider">
-                  Select Member Role (For Mock Testing)
-                </label>
-                <select
-                  value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                  className="w-full bg-surface-container-lowest border border-outline-variant rounded px-3 py-2 text-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all cursor-pointer"
-                >
-                  <option value="Owner">Owner (Full Permissions)</option>
-                  <option value="Admin">Admin (High Management)</option>
-                  <option value="Developer">Developer (Can Add Tools/Keys)</option>
-                  <option value="Operator">Operator (Can Approve Actions)</option>
-                  <option value="Viewer">Viewer (Read-only Access)</option>
-                </select>
-              </div>
-            )}
-          </div>
-
-          <div>
-            <button
-              type="submit"
-              className="w-full py-2.5 px-4 bg-primary text-on-primary font-bold text-sm rounded hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer glow-primary"
-            >
-              {isSignUp ? "Initialize Workspace" : "Enter Platform"}
-            </button>
-          </div>
-        </form>
-
-        <div className="text-center pt-4 border-t border-outline-variant/30">
+        <div className="mt-8 space-y-4">
           <button
-            onClick={() => {
-              setIsSignUp(!isSignUp);
-              setError("");
-            }}
-            className="text-xs text-primary hover:underline font-semibold cursor-pointer"
+            onClick={() => handleOAuthLogin("google")}
+            disabled={isLoading}
+            className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-surface-container-low hover:bg-surface-container-high border border-outline-variant rounded text-sm font-semibold text-on-surface transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50"
           >
-            {isSignUp ? "Already have an account? Sign In" : "Need a new workspace? Initialize Workspace Owner"}
+            <svg className="w-5 h-5" viewBox="0 0 24 24">
+              <path
+                fill="#4285F4"
+                d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v3.92h6.69a5.74 5.74 0 0 1-2.48 3.77v3.12h4.01c2.34-2.16 3.69-5.32 3.69-8.74z"
+              />
+              <path
+                fill="#34A853"
+                d="M12 24c3.24 0 5.97-1.08 7.96-2.91l-4.01-3.12c-1.12.75-2.55 1.19-3.95 1.19-3.05 0-5.63-2.06-6.55-4.83H1.31v3.23A11.99 11.99 0 0 0 12 24z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M5.45 14.33a7.19 7.19 0 0 1 0-4.66V6.44H1.31a11.99 11.99 0 0 0 0 11.12l4.14-3.23z"
+              />
+              <path
+                fill="#EA4335"
+                d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.96 1.19 15.24 0 12 0 7.31 0 3.23 2.68 1.31 6.58l4.14 3.23c.92-2.77 3.5-4.83 6.55-4.83z"
+              />
+            </svg>
+            Continue with Google
+          </button>
+          
+          <button
+            onClick={() => handleOAuthLogin("github")}
+            disabled={isLoading}
+            className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-surface-container-low hover:bg-surface-container-high border border-outline-variant rounded text-sm font-semibold text-on-surface transition-all active:scale-[0.98] cursor-pointer disabled:opacity-50"
+          >
+            <svg className="w-5 h-5 fill-current text-white" viewBox="0 0 24 24">
+              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.11.82-.26.82-.577v-2.234c-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22v3.293c0 .319.22.694.825.576C20.565 21.795 24 17.3 24 12c0-6.63-5.37-12-12-12z" />
+            </svg>
+            Continue with GitHub
           </button>
         </div>
       </div>

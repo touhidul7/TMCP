@@ -63,6 +63,30 @@ export default function ToolDetailPage({ params }) {
     }
   };
 
+  const handleConnectGoogle = async () => {
+    try {
+      const { supabase } = await import("@/lib/supabase/client");
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const headers = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      // Pass the tool slug so the server only requests the scopes for THIS tool
+      const res = await fetch(`/api/connections/google/start?tool=${encodeURIComponent(tool.slug)}`, { headers });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        alert(data.error || "Failed to start Google OAuth flow");
+      }
+    } catch (err) {
+      alert("Error starting connection: " + err.message);
+    }
+  };
+
   return (
     <>
       <DashboardHeader title={`Manage ${tool.name}`} />
@@ -148,52 +172,120 @@ export default function ToolDetailPage({ params }) {
 
               {/* Add Account Panel Form */}
               {showAddAccount && (
-                <form onSubmit={handleAddAccount} className="p-4 bg-surface-container-low border border-outline-variant rounded space-y-4">
-                  <h4 className="text-xs font-bold text-on-surface">Credentials Mapping</h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Label</label>
-                      <input
-                        type="text"
-                        required
-                        value={accountLabel}
-                        onChange={(e) => setAccountLabel(e.target.value)}
-                        className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary"
-                        placeholder="e.g. Clients Support Email"
-                      />
+                tool.provider.toLowerCase() === "google" ? (
+                  <div className="p-6 bg-surface-container-low border border-outline-variant rounded flex flex-col items-center justify-center text-center space-y-4">
+                    <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm">
+                      <svg className="w-5 h-5" viewBox="0 0 24 24">
+                        <path
+                          fill="#4285F4"
+                          d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v3.92h6.69a5.74 5.74 0 0 1-2.48 3.77v3.12h4.01c2.34-2.16 3.69-5.32 3.69-8.74z"
+                        />
+                        <path
+                          fill="#34A853"
+                          d="M12 24c3.24 0 5.97-1.08 7.96-2.91l-4.01-3.12c-1.12.75-2.55 1.19-3.95 1.19-3.05 0-5.63-2.06-6.55-4.83H1.31v3.23A11.99 11.99 0 0 0 12 24z"
+                        />
+                        <path
+                          fill="#FBBC05"
+                          d="M5.45 14.33a7.19 7.19 0 0 1 0-4.66V6.44H1.31a11.99 11.99 0 0 0 0 11.12l4.14-3.23z"
+                        />
+                        <path
+                          fill="#EA4335"
+                          d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.96 1.19 15.24 0 12 0 7.31 0 3.23 2.68 1.31 6.58l4.14 3.23c.92-2.77 3.5-4.83 6.55-4.83z"
+                        />
+                      </svg>
                     </div>
                     <div>
-                      <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Email / ID</label>
-                      <input
-                        type="text"
-                        value={accountEmail}
-                        onChange={(e) => setAccountEmail(e.target.value)}
-                        className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary"
-                        placeholder="support@company.com"
-                      />
+                      <h4 className="text-xs font-bold text-on-surface">Connect with Google OAuth</h4>
+                      <p className="text-[10px] text-on-surface-variant max-w-xs mt-1">
+                        Authorizing Gmail and Google Drive requires secure OAuth validation directly with Google.
+                      </p>
                     </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">API Key or Password (AES Encrypted)</label>
-                    <input
-                      type="password"
-                      value={accountKey}
-                      onChange={(e) => setAccountKey(e.target.value)}
-                      className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary"
-                      placeholder="••••••••••••••••"
-                    />
-                  </div>
-
-                  <div className="flex justify-end gap-2">
                     <button
-                      type="submit"
-                      className="px-4 py-1.5 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary"
+                      type="button"
+                      onClick={handleConnectGoogle}
+                      className="px-4 py-2 bg-white text-black hover:bg-neutral-100 font-bold text-xs rounded flex items-center gap-2 border border-neutral-300 shadow-sm transition-all active:scale-95 cursor-pointer"
                     >
-                      Authenticate Account
+                      Continue with Google
                     </button>
                   </div>
-                </form>
+                ) : (
+                  <form onSubmit={handleAddAccount} className="p-4 bg-surface-container-low border border-outline-variant rounded space-y-4">
+                    <h4 className="text-xs font-bold text-on-surface">Credentials Mapping</h4>
+                    
+                    {(tool.slug === "hunter-io" || tool.slug === "consulti") ? (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Label</label>
+                          <input
+                            type="text"
+                            required
+                            value={accountLabel}
+                            onChange={(e) => setAccountLabel(e.target.value)}
+                            className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary"
+                            placeholder={tool.slug === "hunter-io" ? "e.g. My Hunter API Key" : "e.g. Consulti Production Key"}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">API Key (AES Encrypted)</label>
+                          <input
+                            type="password"
+                            required
+                            value={accountKey}
+                            onChange={(e) => setAccountKey(e.target.value)}
+                            className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary"
+                            placeholder="Enter your API Key"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Label</label>
+                            <input
+                              type="text"
+                              required
+                              value={accountLabel}
+                              onChange={(e) => setAccountLabel(e.target.value)}
+                              className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary"
+                              placeholder="e.g. Clients Support Email"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Email / ID</label>
+                            <input
+                              type="text"
+                              value={accountEmail}
+                              onChange={(e) => setAccountEmail(e.target.value)}
+                              className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary"
+                              placeholder="support@company.com"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">API Key or Password (AES Encrypted)</label>
+                          <input
+                            type="password"
+                            value={accountKey}
+                            onChange={(e) => setAccountKey(e.target.value)}
+                            className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary"
+                            placeholder="••••••••••••••••"
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="submit"
+                        className="px-4 py-1.5 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary"
+                      >
+                        Authenticate Account
+                      </button>
+                    </div>
+                  </form>
+                )
               )}
 
               {/* Accounts Table */}

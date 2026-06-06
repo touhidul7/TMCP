@@ -36,7 +36,7 @@ const iconMap = {
 export default function DashboardSidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, handleLogout, hasPermission } = useMockStore();
+  const { user, workspaces, currentWorkspace, switchWorkspace, handleLogout, hasPermission } = useMockStore();
 
   const menuItems = [
     { name: "Dashboard", path: "/dashboard", icon: "dashboard", perm: "tools.view" },
@@ -53,15 +53,34 @@ export default function DashboardSidebar() {
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-[280px] border-r border-outline-variant bg-surface-container-low flex flex-col py-4 z-50">
-      {/* Brand Logo */}
-      <div className="px-6 mb-8">
-        <div className="flex items-center gap-2 mb-1">
-          <div className="w-8 h-8 bg-primary rounded flex items-center justify-center glow-primary">
-            <Cpu className="w-4 h-4 text-on-primary" />
+      {/* Brand Logo & Workspace Switcher */}
+      <div className="px-6 mb-8 space-y-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-8 h-8 bg-primary rounded flex items-center justify-center glow-primary">
+              <Cpu className="w-4 h-4 text-on-primary" />
+            </div>
+            <h1 className="text-lg font-bold tracking-tight text-primary">TMCP Gateway</h1>
           </div>
-          <h1 className="text-lg font-bold tracking-tight text-primary">TMCP Gateway</h1>
+          <p className="font-mono text-xs text-on-surface-variant px-1">v2.4.0-stable</p>
         </div>
-        <p className="font-mono text-xs text-on-surface-variant px-1">v2.4.0-stable</p>
+
+        {/* Workspace Switcher */}
+        {workspaces && workspaces.length > 0 && (
+          <div className="px-1">
+            <select
+              value={currentWorkspace || ""}
+              onChange={(e) => switchWorkspace(e.target.value)}
+              className="w-full bg-surface-container-highest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none cursor-pointer font-semibold truncate"
+            >
+              {workspaces.map(ws => (
+                <option key={ws.id} value={ws.id}>
+                  {ws.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Navigation Links */}
@@ -111,7 +130,9 @@ export default function DashboardSidebar() {
             SOP Instructions
           </a>
           <button
-            onClick={() => {
+            onClick={async () => {
+              const { supabase } = await import("@/lib/supabase/client");
+              await supabase.auth.signOut();
               handleLogout();
               router.push("/login");
             }}
@@ -126,10 +147,10 @@ export default function DashboardSidebar() {
         {user && (
           <div className="flex items-center gap-3 pt-4 border-t border-outline-variant">
             <div className="w-8 h-8 rounded bg-surface-container-highest flex items-center justify-center text-primary font-bold text-sm">
-              {user.name.charAt(0).toUpperCase()}
+              {(user.name || user.email || "U").charAt(0).toUpperCase()}
             </div>
             <div className="flex flex-col overflow-hidden">
-              <span className="text-xs font-semibold text-on-surface truncate">{user.name}</span>
+              <span className="text-xs font-semibold text-on-surface truncate">{user.name || user.email || "User"}</span>
               <span className="font-mono text-[9px] text-on-surface-variant tracking-wider uppercase">
                 {user.role}
               </span>
