@@ -58,13 +58,13 @@ export default function DashboardSidebar() {
       {/* Brand Logo & Workspace Switcher */}
       <div className="px-6 mb-8 space-y-4">
         <div>
-          <div className="flex items-center gap-2 mb-1">
+          <Link href="/dashboard" className="flex items-center gap-2 mb-1">
             <div className="w-10 h-10  rounded flex items-center justify-center">
               {/* <Cpu className="w-4 h-4 text-on-primary" /> */}
               <Image src={logo} alt="TMCP Logo" width={24} height={24} />
             </div>
             <h1 className="text-lg font-bold tracking-tight text-primary">TMCP</h1>
-          </div>
+          </Link>
           {/* <p className="font-mono text-xs text-on-surface-variant px-1">v1.0.0</p> */}
         </div>
 
