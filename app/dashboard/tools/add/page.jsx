@@ -37,7 +37,8 @@ export default function AddToolPage() {
   const [restUrl, setRestUrl] = useState("");
   const [restMethod, setRestMethod] = useState("POST");
   const [restAuthType, setRestAuthType] = useState("none");
-  const [restAuthToken, setRestAuthToken] = useState("");
+  // header_name: used when auth type is "api_key" — the header where the credential is injected (e.g. X-API-KEY)
+  const [restAuthHeaderName, setRestAuthHeaderName] = useState("X-API-KEY");
   const [restHeadersJson, setRestHeadersJson] = useState(`{
   "Content-Type": "application/json"
 }`);
@@ -126,7 +127,12 @@ export default function AddToolPage() {
         method: restMethod,
         auth: {
           type: restAuthType,
-          token: restAuthToken
+          // header_name is the HTTP header where the credential API key will be injected at runtime
+          // e.g. "X-API-KEY" for Serper, "Authorization" for Bearer, or "token" for URL query param
+          header_name: restAuthType === "api_key" ? restAuthHeaderName
+                     : restAuthType === "bearer"  ? "Authorization"
+                     : restAuthType === "url_param" ? restAuthHeaderName
+                     : null
         },
         headers: parsedHeaders,
         input_schema: parsedSchema
@@ -347,29 +353,42 @@ export default function AddToolPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Authentication</label>
-                  <select
-                    value={restAuthType}
-                    onChange={(e) => setRestAuthType(e.target.value)}
-                    className="w-full bg-surface-container-lowest border border-outline-variant rounded px-3 py-2 text-xs text-on-surface focus:border-primary cursor-pointer"
-                  >
-                    <option value="none">No Auth (Public)</option>
-                    <option value="bearer">Bearer Token</option>
-                    <option value="api_key">X-API-Key Header</option>
-                  </select>
+              {/* Auth config — defines HOW credentials are injected, NOT what they are */}
+              <div className="p-4 bg-surface-container-lowest border border-outline-variant/50 rounded space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-semibold text-on-surface-variant uppercase font-mono">Authentication Method</p>
+                  <span className="text-[9px] text-primary font-mono bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20">Credential injected from Connected Account</span>
                 </div>
-                <div>
-                  <label className="block text-[10px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Key / Token</label>
-                  <input
-                    type="password"
-                    disabled={restAuthType === "none"}
-                    value={restAuthToken}
-                    onChange={(e) => setRestAuthToken(e.target.value)}
-                    className="w-full bg-surface-container-lowest border border-outline-variant rounded px-3 py-2 text-xs text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none disabled:opacity-50"
-                    placeholder={restAuthType === "none" ? "Not required" : "••••••••••••"}
-                  />
+                <p className="text-[10px] text-on-surface-variant leading-relaxed">
+                  The real API key is stored encrypted in the <strong>Connected Account</strong>. This setting only defines <em>where</em> the gateway injects it at runtime.
+                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Auth Type</label>
+                    <select
+                      value={restAuthType}
+                      onChange={(e) => setRestAuthType(e.target.value)}
+                      className="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-xs text-on-surface focus:border-primary cursor-pointer outline-none"
+                    >
+                      <option value="none">No Auth (Public)</option>
+                      <option value="bearer">Bearer Token → Authorization header</option>
+                      <option value="api_key">API Key → Custom header (e.g. X-API-KEY)</option>
+                      <option value="url_param">API Key → URL query param (e.g. ?token=)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-on-surface-variant uppercase font-mono mb-1">
+                      {restAuthType === "url_param" ? "URL Param Name" : "Header Name"}
+                    </label>
+                    <input
+                      type="text"
+                      disabled={restAuthType === "none" || restAuthType === "bearer"}
+                      value={restAuthType === "bearer" ? "Authorization" : restAuthHeaderName}
+                      onChange={(e) => setRestAuthHeaderName(e.target.value)}
+                      className="w-full bg-surface-container-low border border-outline-variant rounded px-3 py-2 text-xs text-on-surface focus:border-primary outline-none disabled:opacity-40 font-mono"
+                      placeholder={restAuthType === "url_param" ? "token" : "X-API-KEY"}
+                    />
+                  </div>
                 </div>
               </div>
 

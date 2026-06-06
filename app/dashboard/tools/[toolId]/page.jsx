@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, use } from "react";
+import { useState, use, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useMockStore } from "@/lib/mock-store";
 import DashboardHeader from "@/components/dashboard-header";
-import { ArrowLeft, Puzzle, ExternalLink, Unplug } from "lucide-react";
+import { ArrowLeft, Puzzle, ExternalLink, Unplug, Pencil, X, Check, ChevronDown, ChevronUp } from "lucide-react";
 
 export default function ToolDetailPage({ params }) {
   const router = useRouter();
@@ -14,6 +14,7 @@ export default function ToolDetailPage({ params }) {
     features, 
     toolAccounts, 
     addToolAccount, 
+    updateTool,
     disconnectToolAccount, 
     logs,
     hasPermission,
@@ -25,6 +26,22 @@ export default function ToolDetailPage({ params }) {
   const [accountLabel, setAccountLabel] = useState("");
   const [accountEmail, setAccountEmail] = useState("");
   const [accountKey, setAccountKey] = useState("");
+
+  // Edit tool state
+  const [showEdit, setShowEdit] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [editSuccess, setEditSuccess] = useState(false);
+
+  // Edit form fields
+  const [editName, setEditName] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [editWebsite, setEditWebsite] = useState("");
+  const [editUrl, setEditUrl] = useState("");
+  const [editMethod, setEditMethod] = useState("POST");
+  const [editAuthType, setEditAuthType] = useState("none");
+  const [editAuthHeaderName, setEditAuthHeaderName] = useState("X-API-KEY");
+  const [editEnabled, setEditEnabled] = useState(true);
 
   const tool = tools.find((t) => t.id === toolId);
   if (!tool) {
@@ -38,6 +55,70 @@ export default function ToolDetailPage({ params }) {
   const toolFeatures = features.filter((f) => f.tool_id === toolId);
   const connectedAccounts = toolAccounts.filter((a) => a.tool_id === toolId);
   const toolLogs = logs.filter((l) => l.tool_name.toLowerCase() === tool.name.toLowerCase());
+
+  const isCustomRest = tool.tool_type === "custom_rest";
+  const isCustomMcp  = tool.tool_type === "custom_mcp";
+  const isBuiltIn    = tool.tool_type === "built_in";
+
+  // Initialize edit form when opening
+  const openEdit = () => {
+    setEditName(tool.name || "");
+    setEditDesc(tool.description || "");
+    setEditWebsite(tool.official_website_url || "");
+    setEditUrl(tool.rest_base_url || tool.mcp_server_url || "");
+    setEditMethod(tool.rest_config?.method || "POST");
+    setEditAuthType(tool.rest_config?.auth?.type || "none");
+    setEditAuthHeaderName(tool.rest_config?.auth?.header_name || "X-API-KEY");
+    setEditEnabled(tool.is_enabled !== false);
+    setEditError("");
+    setEditSuccess(false);
+    setShowEdit(true);
+  };
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    setEditSaving(true);
+    setEditError("");
+    setEditSuccess(false);
+
+    const updates = {
+      name: editName.trim(),
+      description: editDesc.trim(),
+      official_website_url: editWebsite.trim(),
+      is_enabled: editEnabled,
+    };
+
+    if (isCustomRest) {
+      const newConfig = {
+        ...(tool.rest_config || {}),
+        url: editUrl.trim(),
+        method: editMethod,
+        auth: {
+          type: editAuthType,
+          header_name: editAuthType === "bearer" ? "Authorization"
+                     : editAuthType === "none" ? null
+                     : editAuthHeaderName
+        },
+        // Keep headers clean — no placeholders
+        headers: { "Content-Type": "application/json" },
+      };
+      updates.rest_base_url = editUrl.trim();
+      updates.rest_config = newConfig;
+    }
+
+    if (isCustomMcp) {
+      updates.mcp_server_url = editUrl.trim();
+    }
+
+    const res = await updateTool(toolId, updates);
+    setEditSaving(false);
+    if (res.error) {
+      setEditError(res.error);
+    } else {
+      setEditSuccess(true);
+      setTimeout(() => { setShowEdit(false); setEditSuccess(false); }, 1200);
+    }
+  };
 
   const handleAddAccount = (e) => {
     e.preventDefault();
@@ -75,7 +156,6 @@ export default function ToolDetailPage({ params }) {
         headers["Authorization"] = `Bearer ${token}`;
       }
 
-      // Pass the tool slug so the server only requests the scopes for THIS tool
       const res = await fetch(`/api/connections/google/start?tool=${encodeURIComponent(tool.slug)}`, { headers });
       const data = await res.json();
       if (data.url) {
@@ -132,13 +212,24 @@ export default function ToolDetailPage({ params }) {
                     <p className="text-xs text-on-surface-variant font-mono">{tool.provider} • {tool.category}</p>
                   </div>
                 </div>
-                <span className={`px-2 py-0.5 rounded font-mono text-[9px] font-bold border ${
-                  tool.is_enabled 
-                    ? "bg-green-500/10 text-green-400 border-green-500/20" 
-                    : "bg-surface-container-highest text-on-surface border-outline-variant"
-                }`}>
-                  {tool.is_enabled ? "ENABLED" : "DISABLED"}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`px-2 py-0.5 rounded font-mono text-[9px] font-bold border ${
+                    tool.is_enabled 
+                      ? "bg-green-500/10 text-green-400 border-green-500/20" 
+                      : "bg-surface-container-highest text-on-surface border-outline-variant"
+                  }`}>
+                    {tool.is_enabled ? "ENABLED" : "DISABLED"}
+                  </span>
+                  {hasPermission("tools.add") && (
+                    <button
+                      onClick={showEdit ? () => setShowEdit(false) : openEdit}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-container-high border border-outline-variant text-on-surface-variant hover:text-on-surface hover:border-primary font-semibold text-xs rounded transition-all cursor-pointer"
+                    >
+                      {showEdit ? <X className="w-3 h-3" /> : <Pencil className="w-3 h-3" />}
+                      {showEdit ? "Cancel" : "Edit Tool"}
+                    </button>
+                  )}
+                </div>
               </div>
               <p className="text-xs text-on-surface-variant leading-relaxed mb-4">{tool.description}</p>
               {tool.official_website_url && (
@@ -153,6 +244,194 @@ export default function ToolDetailPage({ params }) {
                 </a>
               )}
             </div>
+
+            {/* Edit Tool Panel */}
+            {showEdit && (
+              <div className="bg-surface-container border border-primary/30 p-6 rounded space-y-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-on-surface">Edit Tool Configuration</h3>
+                    <p className="text-[10px] text-on-surface-variant font-mono uppercase tracking-wider mt-0.5">Update API endpoints, headers, and credentials</p>
+                  </div>
+                  <span className="px-2 py-0.5 bg-primary/10 text-primary rounded font-mono text-[9px] font-bold border border-primary/20">
+                    {tool.tool_type?.replace("_", " ").toUpperCase() || "TOOL"}
+                  </span>
+                </div>
+
+                <form onSubmit={handleSaveEdit} className="space-y-4">
+                  {/* Name & Description */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Tool Name</label>
+                      <input
+                        type="text"
+                        value={editName}
+                        onChange={e => setEditName(e.target.value)}
+                        required
+                        className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                        placeholder="e.g. Serper Search"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Website URL</label>
+                      <input
+                        type="text"
+                        value={editWebsite}
+                        onChange={e => setEditWebsite(e.target.value)}
+                        className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                        placeholder="https://serper.dev"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Description</label>
+                    <textarea
+                      value={editDesc}
+                      onChange={e => setEditDesc(e.target.value)}
+                      rows={2}
+                      className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none resize-none"
+                      placeholder="Describe what this tool does…"
+                    />
+                  </div>
+
+                  {/* REST API Config */}
+                  {isCustomRest && (
+                    <>
+                      <div className="border-t border-outline-variant/40 pt-4">
+                        <p className="text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-3">REST API Configuration</p>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="col-span-2">
+                            <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">API Endpoint URL</label>
+                            <input
+                              type="text"
+                              value={editUrl}
+                              onChange={e => setEditUrl(e.target.value)}
+                              className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                              placeholder="https://api.example.com/endpoint"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Method</label>
+                            <select
+                              value={editMethod}
+                              onChange={e => setEditMethod(e.target.value)}
+                              className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono cursor-pointer"
+                            >
+                              <option>GET</option>
+                              <option>POST</option>
+                              <option>PUT</option>
+                              <option>PATCH</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Auth config — defines WHERE the connected account key is injected */}
+                      <div className="p-4 bg-surface-container-lowest border border-outline-variant/50 rounded space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[9px] font-semibold text-on-surface-variant uppercase font-mono">Authentication Method</p>
+                          <span className="text-[9px] text-primary font-mono bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20">
+                            Key injected from Connected Account
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-on-surface-variant leading-relaxed">
+                          The real API key comes from the <strong>Connected Account</strong> (stored encrypted). This only defines <em>where</em> the gateway injects it.
+                        </p>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Auth Type</label>
+                            <select
+                              value={editAuthType}
+                              onChange={e => setEditAuthType(e.target.value)}
+                              className="w-full bg-surface-container-low border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none cursor-pointer"
+                            >
+                              <option value="none">No Auth (Public)</option>
+                              <option value="bearer">Bearer Token → Authorization header</option>
+                              <option value="api_key">API Key → Custom header (e.g. X-API-KEY)</option>
+                              <option value="url_param">API Key → URL query param (e.g. ?token=)</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">
+                              {editAuthType === "url_param" ? "Param Name" : "Header Name"}
+                            </label>
+                            <input
+                              type="text"
+                              disabled={editAuthType === "none" || editAuthType === "bearer"}
+                              value={editAuthType === "bearer" ? "Authorization" : editAuthHeaderName}
+                              onChange={e => setEditAuthHeaderName(e.target.value)}
+                              className="w-full bg-surface-container-low border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none disabled:opacity-40 font-mono"
+                              placeholder={editAuthType === "url_param" ? "token" : "X-API-KEY"}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* MCP Config */}
+                  {isCustomMcp && (
+                    <div className="border-t border-outline-variant/40 pt-4">
+                      <p className="text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-3">MCP Server Configuration</p>
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">MCP Server URL</label>
+                        <input
+                          type="text"
+                          value={editUrl}
+                          onChange={e => setEditUrl(e.target.value)}
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                          placeholder="https://mcp.example.com/sse"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Enable/Disable toggle */}
+                  <div className="flex items-center gap-3 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setEditEnabled(!editEnabled)}
+                      className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${editEnabled ? "bg-primary" : "bg-outline-variant"}`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${editEnabled ? "translate-x-4" : "translate-x-0"}`} />
+                    </button>
+                    <span className="text-xs font-semibold text-on-surface">
+                      Tool {editEnabled ? "Enabled" : "Disabled"}
+                    </span>
+                  </div>
+
+                  {editError && (
+                    <div className="p-3 bg-error/10 border border-error/20 rounded text-xs text-error font-mono">
+                      {editError}
+                    </div>
+                  )}
+
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowEdit(false)}
+                      className="px-4 py-1.5 bg-surface-container-high border border-outline-variant text-on-surface-variant font-semibold text-xs rounded hover:bg-surface-container-highest transition-all cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={editSaving}
+                      className="flex items-center gap-1.5 px-4 py-1.5 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer disabled:opacity-60 glow-primary"
+                    >
+                      {editSaving ? (
+                        <span className="animate-pulse">Saving…</span>
+                      ) : editSuccess ? (
+                        <><Check className="w-3 h-3" /> Saved!</>
+                      ) : (
+                        "Save Changes"
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
 
             {/* Labeled Connected Accounts */}
             <div className="bg-surface-container border border-outline-variant p-6 rounded space-y-4">
@@ -171,111 +450,57 @@ export default function ToolDetailPage({ params }) {
                 )}
               </div>
 
-              {/* Add Account Panel Form */}
               {showAddAccount && (
-                tool.provider.toLowerCase() === "google" ? (
-                  <div className="p-6 bg-surface-container-low border border-outline-variant rounded flex flex-col items-center justify-center text-center space-y-4">
-                    <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm">
-                      <svg className="w-5 h-5" viewBox="0 0 24 24">
-                        <path
-                          fill="#4285F4"
-                          d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v3.92h6.69a5.74 5.74 0 0 1-2.48 3.77v3.12h4.01c2.34-2.16 3.69-5.32 3.69-8.74z"
-                        />
-                        <path
-                          fill="#34A853"
-                          d="M12 24c3.24 0 5.97-1.08 7.96-2.91l-4.01-3.12c-1.12.75-2.55 1.19-3.95 1.19-3.05 0-5.63-2.06-6.55-4.83H1.31v3.23A11.99 11.99 0 0 0 12 24z"
-                        />
-                        <path
-                          fill="#FBBC05"
-                          d="M5.45 14.33a7.19 7.19 0 0 1 0-4.66V6.44H1.31a11.99 11.99 0 0 0 0 11.12l4.14-3.23z"
-                        />
-                        <path
-                          fill="#EA4335"
-                          d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.96 1.19 15.24 0 12 0 7.31 0 3.23 2.68 1.31 6.58l4.14 3.23c.92-2.77 3.5-4.83 6.55-4.83z"
-                        />
-                      </svg>
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-on-surface">Connect with Google OAuth</h4>
-                      <p className="text-[10px] text-on-surface-variant max-w-xs mt-1">
-                        Authorizing Gmail and Google Drive requires secure OAuth validation directly with Google.
-                      </p>
-                    </div>
+                isBuiltIn ? (
+                  /* Google OAuth flow */
+                  <div className="p-4 border border-dashed border-primary/30 rounded bg-surface-container-lowest space-y-3">
+                    <p className="text-xs text-on-surface-variant leading-relaxed">
+                      This tool requires Google OAuth. Click below to authenticate and authorize access.
+                    </p>
                     <button
-                      type="button"
                       onClick={handleConnectGoogle}
-                      className="px-4 py-2 bg-white text-black hover:bg-neutral-100 font-bold text-xs rounded flex items-center gap-2 border border-neutral-300 shadow-sm transition-all active:scale-95 cursor-pointer"
+                      className="px-4 py-2 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary"
                     >
-                      Continue with Google
+                      Connect with Google OAuth
                     </button>
                   </div>
                 ) : (
-                  <form onSubmit={handleAddAccount} className="p-4 bg-surface-container-low border border-outline-variant rounded space-y-4">
-                    <h4 className="text-xs font-bold text-on-surface">Credentials Mapping</h4>
-                    
-                    {(tool.slug === "hunter-io" || tool.slug === "consulti") ? (
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Label</label>
-                          <input
-                            type="text"
-                            required
-                            value={accountLabel}
-                            onChange={(e) => setAccountLabel(e.target.value)}
-                            className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary"
-                            placeholder={tool.slug === "hunter-io" ? "e.g. My Hunter API Key" : "e.g. Consulti Production Key"}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">API Key (AES Encrypted)</label>
-                          <input
-                            type="password"
-                            required
-                            value={accountKey}
-                            onChange={(e) => setAccountKey(e.target.value)}
-                            className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary"
-                            placeholder="Enter your API Key"
-                          />
-                        </div>
+                  /* API Key / credentials form */
+                  <form onSubmit={handleAddAccount} className="p-4 border border-dashed border-outline-variant/50 rounded bg-surface-container-lowest space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Label</label>
+                        <input
+                          type="text"
+                          value={accountLabel}
+                          onChange={(e) => setAccountLabel(e.target.value)}
+                          required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                          placeholder="e.g. Clients Support Email"
+                        />
                       </div>
-                    ) : (
-                      <>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Label</label>
-                            <input
-                              type="text"
-                              required
-                              value={accountLabel}
-                              onChange={(e) => setAccountLabel(e.target.value)}
-                              className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary"
-                              placeholder="e.g. Clients Support Email"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Email / ID</label>
-                            <input
-                              type="text"
-                              value={accountEmail}
-                              onChange={(e) => setAccountEmail(e.target.value)}
-                              className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary"
-                              placeholder="support@company.com"
-                            />
-                          </div>
-                        </div>
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Email / ID</label>
+                        <input
+                          type="text"
+                          value={accountEmail}
+                          onChange={(e) => setAccountEmail(e.target.value)}
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                          placeholder="support@company.com"
+                        />
+                      </div>
+                    </div>
 
-                        <div>
-                          <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">API Key or Password (AES Encrypted)</label>
-                          <input
-                            type="password"
-                            value={accountKey}
-                            onChange={(e) => setAccountKey(e.target.value)}
-                            className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary"
-                            placeholder="••••••••••••••••"
-                          />
-                        </div>
-                      </>
-                    )}
+                    <div>
+                      <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">API Key or Password (AES Encrypted)</label>
+                      <input
+                        type="password"
+                        value={accountKey}
+                        onChange={(e) => setAccountKey(e.target.value)}
+                        className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                        placeholder="••••••••••••••••"
+                      />
+                    </div>
 
                     <div className="flex justify-end gap-2">
                       <button
