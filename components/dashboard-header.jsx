@@ -1,13 +1,46 @@
-"use client";
-
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMockStore } from "@/lib/mock-store";
-import { Search, AlertTriangle, Bell, Terminal } from "lucide-react";
+import { Search, AlertTriangle, Bell, Terminal, Bot, Puzzle } from "lucide-react";
 
 export default function DashboardHeader({ title }) {
   const router = useRouter();
-  const { user, approvals } = useMockStore();
+  const { user, approvals, tools, agents, logs } = useMockStore();
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const searchRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (searchRef.current && !searchRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const cleanQuery = searchQuery.trim().toLowerCase();
+  
+  const filteredTools = cleanQuery && tools ? tools.filter(t => 
+    t.name.toLowerCase().includes(cleanQuery) ||
+    t.provider.toLowerCase().includes(cleanQuery) ||
+    (t.description && t.description.toLowerCase().includes(cleanQuery))
+  ) : [];
+
+  const filteredAgents = cleanQuery && agents ? agents.filter(a => 
+    a.name.toLowerCase().includes(cleanQuery) ||
+    (a.description && a.description.toLowerCase().includes(cleanQuery))
+  ) : [];
+
+  const filteredLogs = cleanQuery && logs ? logs.filter(l => 
+    (l.tool_name && l.tool_name.toLowerCase().includes(cleanQuery)) ||
+    (l.feature_key && l.feature_key.toLowerCase().includes(cleanQuery)) ||
+    (l.input && typeof l.input === 'string' && l.input.toLowerCase().includes(cleanQuery)) ||
+    (l.input && typeof l.input === 'object' && JSON.stringify(l.input).toLowerCase().includes(cleanQuery))
+  ).slice(0, 5) : [];
 
   const pendingApprovalsCount = approvals.filter(a => a.status === "pending").length;
 
@@ -19,13 +52,125 @@ export default function DashboardHeader({ title }) {
         </h2>
         
         {/* Search */}
-        <div className="relative hidden md:block">
+        <div ref={searchRef} className="relative hidden md:block">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant w-4 h-4" />
           <input
             type="text"
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setIsOpen(true);
+            }}
+            onFocus={() => setIsOpen(true)}
             className="bg-surface-container-lowest border border-outline-variant rounded pl-10 pr-4 py-1.5 w-80 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all placeholder:text-outline/70 text-on-surface"
             placeholder="Search tools, agents, or logs..."
           />
+          {isOpen && searchQuery.trim() !== "" && (
+            <div className="absolute top-full left-0 mt-2 w-96 bg-surface-container-high border border-outline-variant rounded-lg shadow-2xl overflow-hidden z-50 max-h-[480px] overflow-y-auto backdrop-blur-md bg-opacity-95">
+              {filteredTools.length === 0 && filteredAgents.length === 0 && filteredLogs.length === 0 ? (
+                <div className="p-6 text-center text-on-surface-variant text-sm">
+                  No results found for <span className="font-semibold text-on-surface">"{searchQuery}"</span>
+                </div>
+              ) : (
+                <div className="py-2 text-xs space-y-2">
+                  {filteredTools.length > 0 && (
+                    <div>
+                      <div className="px-3 py-1 font-bold uppercase tracking-wider font-mono text-outline text-[9px] bg-surface-container-highest/45 border-y border-outline-variant/30">
+                        Tools ({filteredTools.length})
+                      </div>
+                      {filteredTools.map(tool => (
+                        <button
+                          key={tool.id}
+                          onClick={() => {
+                            router.push(`/dashboard/tools/${tool.id}`);
+                            setSearchQuery("");
+                            setIsOpen(false);
+                          }}
+                          className="w-full text-left px-4 py-2 hover:bg-surface-container-highest/60 flex items-center gap-3 transition-colors group cursor-pointer"
+                        >
+                          <div className="w-8 h-8 rounded bg-surface-container-low flex items-center justify-center border border-outline-variant text-primary shrink-0">
+                            {tool.official_website_url ? (
+                              <img
+                                src={`https://www.google.com/s2/favicons?sz=64&domain=${tool.official_website_url}`}
+                                alt={tool.name}
+                                className="w-5 h-5 object-contain"
+                                onError={(e) => { e.target.style.display = "none"; }}
+                              />
+                            ) : (
+                              <Puzzle className="w-4 h-4" />
+                            )}
+                          </div>
+                          <div className="truncate">
+                            <div className="font-bold text-on-surface group-hover:text-primary transition-colors text-xs">{tool.name}</div>
+                            <div className="text-[10px] text-on-surface-variant font-mono">{tool.provider}</div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {filteredAgents.length > 0 && (
+                    <div>
+                      <div className="px-3 py-1 font-bold uppercase tracking-wider font-mono text-outline text-[9px] bg-surface-container-highest/45 border-y border-outline-variant/30">
+                        Agents ({filteredAgents.length})
+                      </div>
+                      {filteredAgents.map(agent => (
+                        <button
+                          key={agent.id}
+                          onClick={() => {
+                            router.push(`/dashboard/agents/${agent.id}`);
+                            setSearchQuery("");
+                            setIsOpen(false);
+                          }}
+                          className="w-full text-left px-4 py-2 hover:bg-surface-container-highest/60 flex items-center gap-3 transition-colors group cursor-pointer"
+                        >
+                          <div className="w-8 h-8 rounded bg-surface-container-low flex items-center justify-center border border-outline-variant text-primary shrink-0">
+                            <Bot className="w-4 h-4" />
+                          </div>
+                          <div className="truncate">
+                            <div className="font-bold text-on-surface group-hover:text-primary transition-colors text-xs">{agent.name}</div>
+                            <div className="text-[10px] text-on-surface-variant truncate">{agent.description || "No description"}</div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {filteredLogs.length > 0 && (
+                    <div>
+                      <div className="px-3 py-1 font-bold uppercase tracking-wider font-mono text-outline text-[9px] bg-surface-container-highest/45 border-y border-outline-variant/30">
+                        Logs ({filteredLogs.length})
+                      </div>
+                      {filteredLogs.map(log => (
+                        <button
+                          key={log.id}
+                          onClick={() => {
+                            router.push(`/dashboard/logs`);
+                            setSearchQuery("");
+                            setIsOpen(false);
+                          }}
+                          className="w-full text-left px-4 py-2 hover:bg-surface-container-highest/60 flex items-center gap-3 transition-colors group cursor-pointer"
+                        >
+                          <div className="w-8 h-8 rounded bg-surface-container-low flex items-center justify-center border border-outline-variant text-primary shrink-0">
+                            <Terminal className="w-4 h-4" />
+                          </div>
+                          <div className="truncate">
+                            <div className="font-bold text-on-surface group-hover:text-primary transition-colors flex items-center gap-2 text-xs">
+                              <span>{log.tool_name || "Tool"}</span>
+                              <span className="text-[9px] text-outline font-normal">({log.feature_key})</span>
+                            </div>
+                            <div className="text-[10px] text-on-surface-variant truncate font-mono">
+                              {typeof log.input === 'object' ? JSON.stringify(log.input) : String(log.input)}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Quick links */}
