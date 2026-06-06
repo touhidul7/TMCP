@@ -16,6 +16,7 @@ export default function ApiKeysPage() {
   // Key display state
   const [newRawKey, setNewRawKey] = useState("");
   const [copied, setCopied] = useState(false);
+  const [copiedPrefix, setCopiedPrefix] = useState(null);
 
   const getAgentName = (id) => {
     return agents.find((a) => a.id === id)?.name || "Unknown Agent";
@@ -206,7 +207,22 @@ export default function ApiKeysPage() {
                   <tr key={key.id} className="hover:bg-surface-container-highest/10 transition-colors">
                     <td className="px-6 py-4 font-sans font-bold text-on-surface">{key.name}</td>
                     <td className="px-6 py-4 font-sans font-semibold text-primary">{getAgentName(key.agent_id)}</td>
-                    <td className="px-6 py-4 text-on-surface-variant">{key.key_prefix}...</td>
+                    <td className="px-6 py-4 text-on-surface-variant">
+                      <div className="flex items-center gap-2">
+                        <span>{key.key_prefix}...</span>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(key.key_prefix);
+                            setCopiedPrefix(key.id);
+                            setTimeout(() => setCopiedPrefix(null), 2000);
+                          }}
+                          className="p-1 hover:bg-surface-container-high rounded text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
+                          title="Copy key prefix"
+                        >
+                          {copiedPrefix === key.id ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+                        </button>
+                      </div>
+                    </td>
                     <td className="px-6 py-4 text-on-surface-variant">
                       {key.expires_at ? key.expires_at.slice(0, 10) : "Never"}
                     </td>

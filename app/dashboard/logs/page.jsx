@@ -141,7 +141,7 @@ export default function LogsPage() {
                   <tbody className="divide-y divide-outline-variant/30 font-mono text-xs">
                     {filteredLogs.map((log) => (
                       <tr key={log.id} className="hover:bg-surface-container-highest/15 transition-colors">
-                        <td className="px-5 py-4 text-on-surface-variant">{log.timestamp.replace("T", " ").slice(0, 19)}</td>
+                        <td className="px-5 py-4 text-on-surface-variant">{(log.timestamp || log.created_at || "").replace("T", " ").slice(0, 19)}</td>
                         <td className="px-5 py-4 font-sans font-semibold text-on-surface">{log.agent_name}</td>
                         <td className="px-5 py-4">
                           <span className="font-sans font-bold text-primary">{log.tool_name}</span>
