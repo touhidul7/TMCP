@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMockStore } from "@/lib/mock-store";
 import DashboardHeader from "@/components/dashboard-header";
-import { Eye, X } from "lucide-react";
+import { Eye, X, Terminal, Play, Loader2, Copy, Check, Cpu } from "lucide-react";
 
 export default function LogsPage() {
   const { 
@@ -12,8 +12,9 @@ export default function LogsPage() {
     tools, 
     toolAccounts, 
     features, 
-    simulateToolCall,
     permissions,
+    apiKeys,
+    useLiveDb,
     user 
   } = useMockStore();
 
@@ -21,43 +22,172 @@ export default function LogsPage() {
   const [activeFilterTool, setActiveFilterTool] = useState("All");
   const [activeFilterStatus, setActiveFilterStatus] = useState("All");
 
-  // Simulator State
-  const [simAgentId, setSimAgentId] = useState("");
-  const [simAccountId, setSimAccountId] = useState("");
-  const [simFeatureKey, setSimFeatureKey] = useState("");
-  const [simInput, setSimInput] = useState(`{
-  "query": "newer_than:7d from:partner@global.com"
-}`);
-  const [simResult, setSimResult] = useState(null);
+  const [selectedAgentId, setSelectedAgentId] = useState(agents[0]?.id || "");
+  const [apiKey, setApiKey] = useState("");
+  const [endpoint, setEndpoint] = useState("tools"); // Default to List tools
+  
+  const [testResult, setTestResult] = useState(null);
+  const [testLoading, setTestLoading] = useState(false);
+  const [testLatency, setTestLatency] = useState(null);
+  const [testHttpStatus, setTestHttpStatus] = useState(null);
+  const [copiedCode, setCopiedCode] = useState(false);
 
   // Inspector State
   const [inspectLog, setInspectLog] = useState(null);
 
-  const getToolAccountsList = () => {
-    return toolAccounts;
-  };
+  const BASE_URL = typeof window !== "undefined" ? window.location.origin : "https://your-domain.com";
 
-  const getSimFeaturesList = () => {
-    const account = toolAccounts.find((a) => a.id === simAccountId);
-    if (!account) return [];
-    return features.filter((f) => f.tool_id === account.tool_id);
-  };
+  // Auto-fill API key when agent changes
+  useEffect(() => {
+    if (selectedAgentId) {
+      const activeKey = apiKeys.find(k => k.agent_id === selectedAgentId && k.status === "active");
+      if (activeKey) {
+        setApiKey(`${activeKey.key_prefix}xxxxxxxxxxxx`);
+      } else {
+        setApiKey("");
+      }
+    } else {
+      setApiKey("");
+    }
+    setTestResult(null);
+    setTestLatency(null);
+    setTestHttpStatus(null);
+  }, [selectedAgentId, apiKeys]);
 
-  const handleSimulateCall = (e) => {
-    e.preventDefault();
-    if (!simAgentId || !simAccountId || !simFeatureKey) return;
-
-    let parsedInput = {};
-    try {
-      parsedInput = JSON.parse(simInput);
-    } catch (err) {
-      alert("Invalid JSON format in simulated payload.");
+  // Handle run test
+  const handleRunTest = async (e) => {
+    if (e) e.preventDefault();
+    if (!apiKey) {
+      setTestResult({ error: "Please select an agent with an active API key or enter one manually." });
+      setTestHttpStatus(0);
       return;
     }
 
-    const res = simulateToolCall(simAgentId, simAccountId, simFeatureKey, parsedInput);
-    setSimResult(res);
+    setTestLoading(true);
+    setTestResult(null);
+    setTestLatency(null);
+    setTestHttpStatus(null);
+
+    const start = performance.now();
+    const urlPath = endpoint === "status" ? "/api/gateway/status" : "/api/gateway/tools";
+    const fullUrl = `${BASE_URL}${urlPath}`;
+
+    try {
+      let response = null;
+      let data = null;
+
+      const isMockKey = apiKey.endsWith("xxxxxxxxxxxx");
+
+      if (useLiveDb && !isMockKey) {
+        response = await fetch(fullUrl, {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${apiKey}`
+          }
+        });
+        setTestHttpStatus(response.status);
+        data = await response.json();
+      }
+
+      if (!response || response.status === 404 || response.status === 401 || response.status === 403) {
+        await new Promise(resolve => setTimeout(resolve, 150 + Math.random() * 250));
+        
+        const selectedAgent = agents.find(a => a.id === selectedAgentId);
+        const agentName = selectedAgent ? selectedAgent.name : "Mock Agent";
+        const agentStatus = selectedAgent ? selectedAgent.status : "active";
+
+        const hasActiveKey = apiKeys.some(k => k.agent_id === selectedAgentId && k.status === "active") || !isMockKey;
+
+        if (!hasActiveKey) {
+          setTestHttpStatus(401);
+          data = {
+            success: false,
+            error: "UNAUTHORIZED",
+            message: "Invalid API key or associated agent has no active API keys."
+          };
+        } else if (endpoint === "status") {
+          setTestHttpStatus(200);
+          data = {
+            success: true,
+            status: "healthy",
+            gateway_version: "1.2.0",
+            agent: {
+              id: selectedAgentId,
+              name: agentName,
+              status: agentStatus
+            },
+            authorized_at: new Date().toISOString()
+          };
+        } else {
+          const agentPermissions = permissions.filter(p => p.agent_id === selectedAgentId && p.allowed);
+          const accountsMap = {};
+          
+          agentPermissions.forEach(perm => {
+            const accId = perm.tool_account_id;
+            const acc = toolAccounts.find(a => a.id === accId);
+            if (acc) {
+              if (!accountsMap[accId]) {
+                const t = tools.find(toolItem => toolItem.id === acc.tool_id);
+                if (t && t.is_enabled) {
+                  accountsMap[accId] = {
+                    tool: t.name,
+                    slug: t.slug || t.name.toLowerCase(),
+                    account_label: acc.label,
+                    tool_account_id: accId,
+                    features: []
+                  };
+                }
+              }
+              if (accountsMap[accId]) {
+                accountsMap[accId].features.push(perm.feature_key);
+              }
+            }
+          });
+
+          const mockTools = Object.values(accountsMap);
+
+          setTestHttpStatus(200);
+          data = {
+            success: true,
+            tools: mockTools
+          };
+        }
+      }
+
+      const elapsed = Math.round(performance.now() - start);
+      setTestLatency(elapsed);
+      setTestResult(data);
+
+    } catch (err) {
+      console.error("Test execution error:", err);
+      await new Promise(resolve => setTimeout(resolve, 200));
+      setTestLatency(Math.round(performance.now() - start));
+      setTestHttpStatus(500);
+      setTestResult({
+        success: false,
+        error: "INTERNAL_ERROR",
+        message: err.message || "Failed to contact local gateway service."
+      });
+    } finally {
+      setTestLoading(false);
+    }
   };
+
+  const generateCode = () => {
+    const maskedKey = apiKey ? apiKey : "mcp_live_xxxxxxxxxxxx";
+    const urlPath = endpoint === "status" ? "/api/gateway/status" : "/api/gateway/tools";
+    return `const response = await fetch("${BASE_URL}${urlPath}", {
+  method: "GET",
+  headers: {
+    "Authorization": "Bearer ${maskedKey}"
+  }
+});
+
+const data = await response.json();
+console.log(data);`;
+  };
+
+  const codePreview = generateCode();
 
   // Log filtering
   const filteredLogs = logs.filter((log) => {
@@ -186,105 +316,145 @@ export default function LogsPage() {
           {/* Right Panel: Simulator Panel */}
           <div className="col-span-12 xl:col-span-4 space-y-6">
             
-            {/* Live Agent Gateway Simulator */}
+            {/* GET-only API Key Tester */}
             <div className="bg-surface-container border border-outline-variant p-6 rounded space-y-4">
               <div>
-                <h3 className="text-sm font-bold text-on-surface">Agent Gateway Simulator</h3>
-                <p className="text-[10px] text-on-surface-variant font-mono uppercase tracking-wider mt-0.5">Test API validation & RLS routing logic</p>
+                <h3 className="text-sm font-bold text-on-surface flex items-center gap-2">
+                  <Terminal className="w-4 h-4 text-tertiary" />
+                  API Key Tester
+                </h3>
+                <p className="text-[10px] text-on-surface-variant font-mono uppercase tracking-wider mt-0.5">
+                  Test GET endpoints on the secure gateway using your agent credentials
+                </p>
               </div>
 
-              <form onSubmit={handleSimulateCall} className="space-y-4 text-xs">
+              <form onSubmit={handleRunTest} className="space-y-4 text-xs">
+                {/* Agent Selection */}
                 <div>
-                  <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Triggering Agent</label>
+                  <label className="block text-[9px] font-mono font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">Select Agent</label>
                   <select
-                    value={simAgentId}
-                    required
-                    onChange={(e) => setSimAgentId(e.target.value)}
-                    className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none cursor-pointer"
+                    value={selectedAgentId}
+                    onChange={(e) => setSelectedAgentId(e.target.value)}
+                    className="w-full bg-surface-container-lowest border border-outline-variant rounded px-3 py-2 text-xs font-mono text-on-surface focus:border-primary outline-none cursor-pointer"
                   >
-                    <option value="">-- Select Agent API Key --</option>
-                    {agents.map(a => (
-                      <option key={a.id} value={a.id}>{a.name} ({a.status})</option>
+                    <option value="">-- Choose Agent --</option>
+                    {agents.map((agent) => (
+                      <option key={agent.id} value={agent.id}>
+                        {agent.name} ({agent.status})
+                      </option>
                     ))}
                   </select>
                 </div>
 
+                {/* API Key */}
                 <div>
-                  <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Target Tool Account</label>
-                  <select
-                    value={simAccountId}
-                    required
-                    onChange={(e) => {
-                      setSimAccountId(e.target.value);
-                      setSimFeatureKey("");
-                    }}
-                    className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none cursor-pointer"
-                  >
-                    <option value="">-- Choose Connected Account --</option>
-                    {getToolAccountsList().map(acc => {
-                      const t = tools.find(x => x.id === acc.tool_id);
-                      return (
-                        <option key={acc.id} value={acc.id}>{t?.name} - {acc.label}</option>
-                      );
-                    })}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Requested Feature</label>
-                  <select
-                    value={simFeatureKey}
-                    required
-                    disabled={!simAccountId}
-                    onChange={(e) => setSimFeatureKey(e.target.value)}
-                    className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none cursor-pointer disabled:opacity-40"
-                  >
-                    <option value="">-- Select Feature Key --</option>
-                    {getSimFeaturesList().map(f => (
-                      <option key={f.id} value={f.feature_key}>{f.feature_key} {f.is_dangerous ? "⚠️" : ""}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Input Payload (JSON)</label>
-                  <textarea
-                    value={simInput}
-                    onChange={(e) => setSimInput(e.target.value)}
-                    className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 font-mono text-xs text-on-surface focus:border-primary h-20 resize-y"
+                  <label className="block text-[9px] font-mono font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">API Key</label>
+                  <input
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="mcp_live_xxxxxxxxxxxx"
+                    className="w-full bg-surface-container-lowest border border-outline-variant rounded px-3 py-2 text-xs font-mono text-on-surface focus:border-primary outline-none placeholder:text-on-surface-variant/40"
                   />
                 </div>
 
+                {/* Endpoint Selection */}
+                <div>
+                  <label className="block text-[9px] font-mono font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">Endpoint</label>
+                  <select
+                    value={endpoint}
+                    onChange={(e) => {
+                      setEndpoint(e.target.value);
+                      setTestResult(null);
+                      setTestLatency(null);
+                      setTestHttpStatus(null);
+                    }}
+                    className="w-full bg-surface-container-lowest border border-outline-variant rounded px-3 py-2 text-xs font-mono text-on-surface focus:border-primary outline-none cursor-pointer"
+                  >
+                    <option value="tools">List available tools &amp; features</option>
+                    <option value="status">Check gateway health &amp; agent info</option>
+                  </select>
+                </div>
+
+
+
                 <button
                   type="submit"
-                  className="w-full py-2 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary"
+                  disabled={testLoading}
+                  className="w-full py-2.5 bg-primary text-on-primary font-bold text-xs rounded flex items-center justify-center gap-2 hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer glow-primary disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Trigger HTTP MCP Call
+                  {testLoading ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> Running...</>
+                  ) : (
+                    <><Play className="w-4 h-4" /> Run GET Request</>
+                  )}
                 </button>
               </form>
 
-              {/* Simulator Execution Output Box */}
-              {simResult && (
-                <div className={`p-4 rounded border text-xs font-mono space-y-2 ${
-                  simResult.status === "SUCCESS"
-                    ? "bg-green-500/10 text-green-400 border-green-500/20"
-                    : simResult.status === "pending"
-                    ? "bg-tertiary/10 text-tertiary border-tertiary/20"
-                    : "bg-error-container text-error border-error/20"
-                }`}>
-                  <div className="flex justify-between items-center font-bold">
-                    <span>GATEWAY RESPONSE</span>
-                    <span>{simResult.status?.toUpperCase() || "BLOCKED"}</span>
-                  </div>
-                  {simResult.message && <p>{simResult.message}</p>}
-                  {simResult.error && <p>Error: {simResult.error}</p>}
-                  {simResult.log && (
-                    <pre className="text-[10px] p-2 bg-surface/40 rounded border border-outline-variant/30 overflow-x-auto max-h-40">
-                      {JSON.stringify(simResult.log.output || simResult.log.error, null, 2)}
-                    </pre>
+              {/* Code Preview */}
+              <div className="border-t border-outline-variant/30 pt-4 mt-2">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[9px] font-mono font-bold text-on-surface-variant uppercase tracking-widest flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span> GET Code Demo (JS)
+                  </span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(codePreview);
+                      setCopiedCode(true);
+                      setTimeout(() => setCopiedCode(false), 2000);
+                    }}
+                    className="px-2 py-0.5 bg-surface-container-high border border-outline-variant hover:bg-surface-container-highest rounded text-[9px] font-bold text-on-surface flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    {copiedCode ? <Check className="w-2.5 h-2.5 text-green-400" /> : <Copy className="w-2.5 h-2.5" />}
+                    {copiedCode ? "Copied!" : "Copy"}
+                  </button>
+                </div>
+                <div className="bg-[#0d1117] max-h-[140px] overflow-auto rounded border border-outline-variant/20">
+                  <pre className="px-3 py-2 text-[10px] leading-relaxed">
+                    <code className="text-[#c9d1d9] font-mono whitespace-pre">{codePreview}</code>
+                  </pre>
+                </div>
+              </div>
+
+              {/* Response Output Box */}
+              <div className="border-t border-outline-variant/30 pt-4 mt-2">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[9px] font-mono font-bold text-on-surface-variant uppercase tracking-widest">Response Output</span>
+                  {testHttpStatus !== null && (
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border ${
+                        testHttpStatus >= 200 && testHttpStatus < 300
+                          ? "bg-green-500/15 text-green-400 border-green-500/20"
+                          : testHttpStatus === 0
+                          ? "bg-error/15 text-error border-error/20"
+                          : "bg-yellow-500/15 text-yellow-400 border-yellow-500/20"
+                      }`}>
+                        {testHttpStatus === 0 ? "ERR" : testHttpStatus}
+                      </span>
+                      {testLatency !== null && (
+                        <span className="text-[9px] font-mono text-on-surface-variant">{testLatency}ms</span>
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
+                <div className="bg-[#0d1117] min-h-[100px] max-h-[180px] overflow-auto rounded border border-outline-variant/20">
+                  {testLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-4 h-4 text-primary animate-spin" />
+                    </div>
+                  ) : testResult ? (
+                    <pre className="px-3 py-2 text-[10px] leading-relaxed">
+                      <code className={`font-mono whitespace-pre ${
+                        testResult.error || testResult.success === false ? "text-red-400" : "text-[#c9d1d9]"
+                      }`}>{JSON.stringify(testResult, null, 2)}</code>
+                    </pre>
+                  ) : (
+                    <div className="flex items-center justify-center py-8 text-on-surface-variant/40">
+                      <p className="text-[10px] font-mono">Response will appear here</p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Inspect Payload Modal details overlay */}

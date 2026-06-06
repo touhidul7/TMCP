@@ -3,28 +3,56 @@
 import { useState } from "react";
 import { useMockStore } from "@/lib/mock-store";
 import DashboardHeader from "@/components/dashboard-header";
+import PermissionGuard from "@/components/permission-guard";
 import { UserPlus, X } from "lucide-react";
 
 export default function UsersPage() {
   const { users, inviteUser, changeUserRole, removeUser, hasPermission, user: currentUser } = useMockStore();
+
+  return (
+    <PermissionGuard permission="users.view">
+      <UsersPageContent
+        users={users}
+        inviteUser={inviteUser}
+        changeUserRole={changeUserRole}
+        removeUser={removeUser}
+        hasPermission={hasPermission}
+        currentUser={currentUser}
+      />
+    </PermissionGuard>
+  );
+}
+
+function UsersPageContent({ users, inviteUser, changeUserRole, removeUser, hasPermission, currentUser }) {
 
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [inviteName, setInviteName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("Viewer");
 
-  const handleInviteSubmit = (e) => {
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteFeedback, setInviteFeedback] = useState(null); // { type: 'success'|'error', msg }
+
+  const handleInviteSubmit = async (e) => {
     e.preventDefault();
     if (!inviteName || !inviteEmail) return;
+    setInviteLoading(true);
+    setInviteFeedback(null);
 
-    const res = inviteUser(inviteName, inviteEmail, inviteRole);
-    if (res.error) {
-      alert(res.error);
+    const res = await inviteUser(inviteName, inviteEmail, inviteRole);
+    setInviteLoading(false);
+    if (res && res.error) {
+      setInviteFeedback({ type: 'error', msg: res.error });
     } else {
+      setInviteFeedback({ type: 'success', msg: `Invitation sent to ${inviteEmail}!` });
       setInviteName("");
       setInviteEmail("");
       setInviteRole("Viewer");
-      setShowInviteForm(false);
+      // Close after a short delay
+      setTimeout(() => {
+        setShowInviteForm(false);
+        setInviteFeedback(null);
+      }, 2000);
     }
   };
 
@@ -71,6 +99,16 @@ export default function UsersPage() {
         {showInviteForm && (
           <form onSubmit={handleInviteSubmit} className="p-6 bg-surface-container border border-outline-variant rounded space-y-4 max-w-xl">
             <h3 className="text-sm font-bold text-on-surface">Send Workspace Invitation</h3>
+
+            {inviteFeedback && (
+              <div className={`px-4 py-2.5 rounded text-xs font-semibold border ${
+                inviteFeedback.type === 'success'
+                  ? 'bg-green-500/10 border-green-500/30 text-green-400'
+                  : 'bg-error-container border-error/30 text-on-error-container'
+              }`}>
+                {inviteFeedback.msg}
+              </div>
+            )}
             
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -115,16 +153,17 @@ export default function UsersPage() {
             <div className="flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setShowInviteForm(false)}
+                onClick={() => { setShowInviteForm(false); setInviteFeedback(null); }}
                 className="px-4 py-1.5 border border-outline-variant hover:bg-surface-container-low transition-colors rounded text-xs text-on-surface-variant font-semibold cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-5 py-1.5 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary"
+                disabled={inviteLoading}
+                className="px-5 py-1.5 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Send Invite
+                {inviteLoading ? "Sending..." : "Send Invite"}
               </button>
             </div>
           </form>

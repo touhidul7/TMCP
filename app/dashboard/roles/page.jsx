@@ -1,6 +1,8 @@
 "use client";
 
+import { useMockStore } from "@/lib/mock-store";
 import DashboardHeader from "@/components/dashboard-header";
+import PermissionGuard from "@/components/permission-guard";
 import { CheckCircle, XCircle } from "lucide-react";
 
 export default function RolesPage() {
@@ -48,8 +50,9 @@ export default function RolesPage() {
   };
 
   return (
-    <>
-      <DashboardHeader title="Workspace Roles Configuration" />
+    <PermissionGuard permission="settings.view">
+      <>
+        <DashboardHeader title="Workspace Roles Configuration" />
 
       <main className="p-6 space-y-6 flex-1 overflow-y-auto max-w-6xl">
         <div>
@@ -96,6 +99,7 @@ export default function RolesPage() {
           </div>
         </div>
       </main>
-    </>
+      </>
+    </PermissionGuard>
   );
 }

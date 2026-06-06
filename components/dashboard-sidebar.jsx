@@ -68,17 +68,24 @@ export default function DashboardSidebar() {
         {/* Workspace Switcher */}
         {workspaces && workspaces.length > 0 && (
           <div className="px-1">
-            <select
-              value={currentWorkspace || ""}
-              onChange={(e) => switchWorkspace(e.target.value)}
-              className="w-full bg-surface-container-highest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none cursor-pointer font-semibold truncate"
-            >
-              {workspaces.map(ws => (
-                <option key={ws.id} value={ws.id}>
-                  {ws.name}
-                </option>
-              ))}
-            </select>
+            {workspaces.length > 1 ? (
+              <select
+                value={currentWorkspace || ""}
+                onChange={(e) => switchWorkspace(e.target.value)}
+                className="w-full bg-surface-container-highest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none cursor-pointer font-semibold truncate"
+              >
+                {workspaces.map(ws => (
+                  <option key={ws.id} value={ws.id}>
+                    {ws.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="w-full bg-surface-container-highest/40 border border-outline-variant/30 rounded px-3 py-2 text-xs text-on-surface-variant font-semibold truncate select-none flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary/60"></span>
+                {workspaces[0].name}
+              </div>
+            )}
           </div>
         )}
       </div>

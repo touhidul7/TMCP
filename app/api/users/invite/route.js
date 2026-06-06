@@ -53,9 +53,10 @@ export async function POST(request) {
 
     // Initialize Resend
     const resendKey = process.env.RESEND_API_KEY;
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:3000`;
     if (resendKey) {
       const resend = new Resend(resendKey);
-      const inviteUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost:3000'}/login?invite=${tokenHash}`;
+      const inviteUrl = `${appUrl}/api/auth/callback?invite=${tokenHash}&next=/dashboard`;
       
       await resend.emails.send({
         from: `TMCP Gateway <tmcp@brittosoft.site>`,
