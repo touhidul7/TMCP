@@ -17,7 +17,12 @@ const AddAccountSchema = z.object({
     refreshToken: z.string().optional(),
     clientSecret: z.string().optional(),
     client_secret: z.string().optional(),
-    email: z.string().optional()
+    email: z.string().optional(),
+    // SSH-specific
+    password: z.string().optional(),
+    private_key: z.string().optional(),
+    private_key_passphrase: z.string().optional(),
+    sudo_password: z.string().optional(),
   }).catchall(z.any())
 });
 
@@ -297,11 +302,18 @@ export async function POST(request) {
       throw new Error("Associated tool not found");
     }
 
-    const authType = (parsed.credentials.apiKey || parsed.credentials.key) ? "api_key" : "oauth";
+    const authType = (parsed.credentials.apiKey || parsed.credentials.key) ? "api_key" 
+                   : (parsed.credentials.private_key || parsed.credentials.password) ? "credentials"
+                   : "oauth";
 
     // Build connection metadata (exclude sensitive credentials)
     const metadata = {};
-    const sensitiveKeys = ['apiKey', 'key', 'accessToken', 'access_token', 'refreshToken', 'clientSecret', 'client_secret', 'password', 'security_token', 'auth_token'];
+    const sensitiveKeys = [
+      'apiKey', 'key', 'accessToken', 'access_token', 'refreshToken',
+      'clientSecret', 'client_secret', 'password', 'security_token', 'auth_token',
+      // SSH-specific secrets
+      'private_key', 'private_key_passphrase', 'sudo_password'
+    ];
     
     Object.keys(parsed.credentials).forEach(k => {
       if (!sensitiveKeys.includes(k)) {
@@ -337,7 +349,8 @@ export async function POST(request) {
 
     // Encrypt credentials
     const primaryKey = parsed.credentials.apiKey || parsed.credentials.key;
-    const secondaryKey = parsed.credentials.accessToken || parsed.credentials.access_token || parsed.credentials.password || parsed.credentials.security_token || parsed.credentials.auth_token;
+    const secondaryKey = parsed.credentials.accessToken || parsed.credentials.access_token 
+                       || parsed.credentials.security_token || parsed.credentials.auth_token;
     const clientSecret = parsed.credentials.clientSecret || parsed.credentials.client_secret;
 
     const encryptedApiKey = primaryKey ? encryptText(primaryKey) : null;
@@ -345,18 +358,34 @@ export async function POST(request) {
     const encryptedRefreshToken = parsed.credentials.refreshToken ? encryptText(parsed.credentials.refreshToken) : null;
     const encryptedClientSecret = clientSecret ? encryptText(clientSecret) : null;
 
+    // SSH-specific columns — only include for SSH tool to avoid schema errors on migration
+    const isSSHTool = tool.slug === "ssh";
+    const encryptedPrivateKey           = isSSHTool && parsed.credentials.private_key            ? encryptText(parsed.credentials.private_key)            : null;
+    const encryptedPrivateKeyPassphrase = isSSHTool && parsed.credentials.private_key_passphrase ? encryptText(parsed.credentials.private_key_passphrase) : null;
+    const encryptedPassword             = isSSHTool && parsed.credentials.password               ? encryptText(parsed.credentials.password)               : null;
+    const encryptedSudoPassword         = isSSHTool && parsed.credentials.sudo_password          ? encryptText(parsed.credentials.sudo_password)          : null;
+
+    // Build credential row — only spread SSH columns when relevant
+    const credentialRow = {
+      workspace_id: userContext.workspace_id,
+      user_id: userContext.id,
+      tool_account_id: account.id,
+      encrypted_api_key: encryptedApiKey,
+      encrypted_access_token: encryptedAccessToken,
+      encrypted_refresh_token: encryptedRefreshToken,
+      encrypted_client_secret: encryptedClientSecret,
+      ...(isSSHTool && {
+        encrypted_private_key: encryptedPrivateKey,
+        encrypted_private_key_passphrase: encryptedPrivateKeyPassphrase,
+        encrypted_password: encryptedPassword,
+        encrypted_sudo_password: encryptedSudoPassword,
+      }),
+    };
+
     // Insert into tool_account_credentials
     const { error: credsError } = await supabaseAdmin
       .from("tool_account_credentials")
-      .insert({
-        workspace_id: userContext.workspace_id,
-        user_id: userContext.id,
-        tool_account_id: account.id,
-        encrypted_api_key: encryptedApiKey,
-        encrypted_access_token: encryptedAccessToken,
-        encrypted_refresh_token: encryptedRefreshToken,
-        encrypted_client_secret: encryptedClientSecret
-      });
+      .insert(credentialRow);
 
     if (credsError) throw credsError;
 

@@ -4,7 +4,7 @@ import { useState, use, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useMockStore } from "@/lib/mock-store";
 import DashboardHeader from "@/components/dashboard-header";
-import { ArrowLeft, Puzzle, ExternalLink, Unplug, Pencil, X, Check, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, Puzzle, ExternalLink, Unplug, Pencil, X, Check, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 
 export default function ToolDetailPage({ params }) {
   const router = useRouter();
@@ -15,6 +15,7 @@ export default function ToolDetailPage({ params }) {
     toolAccounts, 
     addToolAccount, 
     updateTool,
+    deleteTool,
     disconnectToolAccount, 
     logs,
     hasPermission,
@@ -42,10 +43,24 @@ export default function ToolDetailPage({ params }) {
 
   // SSH / FTP server fields
   const [serverHost, setServerHost] = useState("");
-  const [serverPort, setServerPort] = useState("");
+  const [serverPort, setServerPort] = useState("22");
   const [serverUser, setServerUser] = useState("");
   const [serverPassword, setServerPassword] = useState("");
   const [serverProtocol, setServerProtocol] = useState("SFTP"); // for FTP tool
+
+  // SSH-specific fields
+  const [sshAuthMethod, setSshAuthMethod]           = useState("Password"); // "Password" | "Private Key"
+  const [sshPrivateKey, setSshPrivateKey]           = useState("");
+  const [sshPassphrase, setSshPassphrase]           = useState("");
+  const [sshWorkDir, setSshWorkDir]                 = useState("");
+  const [sshConnTimeout, setSshConnTimeout]         = useState("30");
+  const [sshCmdTimeout, setSshCmdTimeout]           = useState("60");
+  const [sshUseSudo, setSshUseSudo]                 = useState(false);
+  const [sshSudoPassword, setSshSudoPassword]       = useState("");
+  const [sshRequireApproval, setSshRequireApproval] = useState(true);
+  const [sshAllowedCmds, setSshAllowedCmds]         = useState("");
+  const [sshBlockedCmds, setSshBlockedCmds]         = useState("");
+  const [sshShowAdvanced, setSshShowAdvanced]       = useState(false);
 
   // Connection fields for databases/CRM/marketing tools
   const [connectionFields, setConnectionFields] = useState({});
@@ -68,6 +83,25 @@ export default function ToolDetailPage({ params }) {
   const [editAuthType, setEditAuthType] = useState("none");
   const [editAuthHeaderName, setEditAuthHeaderName] = useState("X-API-KEY");
   const [editEnabled, setEditEnabled] = useState(true);
+  const [disconnectingId, setDisconnectingId] = useState(null); // account being disconnected
+  const [confirmingId, setConfirmingId]     = useState(null); // account awaiting confirmation
+
+  // Custom tool deletion state
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
+  const handleDeleteTool = async () => {
+    setIsDeleting(true);
+    setDeleteError("");
+    const res = await deleteTool(toolId);
+    setIsDeleting(false);
+    if (res?.error) {
+      setDeleteError(res.error);
+    } else {
+      router.push("/dashboard/tools");
+    }
+  };
 
   const tool = tools.find((t) => t.id === toolId);
   if (!tool) {
@@ -167,7 +201,26 @@ export default function ToolDetailPage({ params }) {
       };
       resolvedEmail = imapUsername;
     } else if (tool.slug === "ssh") {
-      credentials = { email: serverUser, key: serverPassword, host: serverHost, port: serverPort };
+      credentials = {
+        // common
+        host: serverHost,
+        port: serverPort || "22",
+        username: serverUser,
+        auth_method: sshAuthMethod,
+        // secret fields handled server-side by column name
+        password:            sshAuthMethod === "Password"    ? serverPassword : undefined,
+        private_key:         sshAuthMethod === "Private Key" ? sshPrivateKey  : undefined,
+        private_key_passphrase: sshAuthMethod === "Private Key" ? sshPassphrase : undefined,
+        // advanced / non-secret
+        default_working_dir: sshWorkDir     || undefined,
+        connection_timeout:  sshConnTimeout || undefined,
+        command_timeout:     sshCmdTimeout  || undefined,
+        use_sudo:            sshUseSudo,
+        sudo_password:       sshUseSudo ? sshSudoPassword : undefined,
+        require_approval:    sshRequireApproval,
+        allowed_commands:    sshAllowedCmds  || undefined,
+        blocked_commands:    sshBlockedCmds  || undefined,
+      };
       resolvedEmail = `${serverUser}@${serverHost}`;
     } else if (tool.slug === "ftp") {
       credentials = { email: serverUser, key: serverPassword, host: serverHost, port: serverPort, protocol: serverProtocol };
@@ -281,10 +334,18 @@ export default function ToolDetailPage({ params }) {
     }
   };
 
-  const handleDisconnect = (accountId) => {
-    if (confirm("Are you sure you want to disconnect this account? Agents using this account will lose access.")) {
-      disconnectToolAccount(accountId);
+  const handleDisconnect = async (accountId) => {
+    // First click → show inline confirmation
+    if (confirmingId !== accountId) {
+      setConfirmingId(accountId);
+      return;
     }
+    // Second click (confirmed) → actually delete
+    setConfirmingId(null);
+    setDisconnectingId(accountId);
+    const res = await disconnectToolAccount(accountId);
+    setDisconnectingId(null);
+    if (res?.error) alert(res.error);
   };
 
   const handleConnectGoogle = async () => {
@@ -369,6 +430,15 @@ export default function ToolDetailPage({ params }) {
                     >
                       {showEdit ? <X className="w-3 h-3" /> : <Pencil className="w-3 h-3" />}
                       {showEdit ? "Cancel" : "Edit Tool"}
+                    </button>
+                  )}
+                  {!isBuiltIn && tool.owner_user_id === user?.id && (
+                    <button
+                      onClick={() => setShowConfirmDelete(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-error/10 border border-error/20 text-error hover:bg-error/20 font-semibold text-xs rounded transition-all cursor-pointer"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      Delete Tool
                     </button>
                   )}
                 </div>
@@ -1259,6 +1329,184 @@ export default function ToolDetailPage({ params }) {
                     </div>
                   </form>
 
+                /* ─── SSH Server form ─── */
+                ) : tool.slug === "ssh" ? (
+                  <form onSubmit={handleAddAccount} className="p-4 border border-dashed border-outline-variant/50 rounded bg-surface-container-lowest space-y-4">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-[9px] font-bold text-on-surface-variant uppercase font-mono tracking-wider">SSH Server Configuration</p>
+                      <span className="text-[8px] font-mono bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded">AES-256 ENCRYPTED</span>
+                    </div>
+
+                    {/* Account Label */}
+                    <div>
+                      <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Label *</label>
+                      <input type="text" value={accountLabel} onChange={e => setAccountLabel(e.target.value)} required
+                        className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                        placeholder="e.g. Production Web Server" />
+                    </div>
+
+                    {/* Host, Port, Username */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="col-span-2">
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Host / IP Address *</label>
+                        <input type="text" value={serverHost} onChange={e => setServerHost(e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                          placeholder="192.168.1.100 or server.example.com" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Port</label>
+                        <input type="number" value={serverPort} onChange={e => setServerPort(e.target.value)}
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                          placeholder="22" />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Username *</label>
+                      <input type="text" value={serverUser} onChange={e => setServerUser(e.target.value)} required
+                        className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                        placeholder="ubuntu, root, deploy…" />
+                    </div>
+
+                    {/* Authentication Method */}
+                    <div>
+                      <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Authentication Method *</label>
+                      <div className="flex gap-2">
+                        {["Password", "Private Key"].map(method => (
+                          <button
+                            key={method}
+                            type="button"
+                            onClick={() => setSshAuthMethod(method)}
+                            className={`flex-1 py-1.5 text-xs font-bold rounded border transition-all cursor-pointer ${
+                              sshAuthMethod === method
+                                ? "bg-primary text-on-primary border-primary glow-primary"
+                                : "bg-surface-container-low text-on-surface-variant border-outline-variant hover:border-primary"
+                            }`}
+                          >
+                            {method === "Password" ? "🔑 Password" : "🗝️ Private Key"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Password auth */}
+                    {sshAuthMethod === "Password" && (
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Password *</label>
+                        <input type="password" value={serverPassword} onChange={e => setServerPassword(e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                          placeholder="••••••••••••••••" />
+                      </div>
+                    )}
+
+                    {/* Private Key auth */}
+                    {sshAuthMethod === "Private Key" && (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Private Key *</label>
+                          <textarea
+                            value={sshPrivateKey} onChange={e => setSshPrivateKey(e.target.value)}
+                            required rows={5}
+                            className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-[10px] text-on-surface focus:border-primary outline-none resize-none font-mono"
+                            placeholder={"-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----"}
+                          />
+                          <p className="text-[9px] text-on-surface-variant mt-1">Paste the contents of your <strong>~/.ssh/id_rsa</strong> or <strong>id_ed25519</strong> file. Stored AES-256 encrypted.</p>
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Private Key Passphrase <span className="font-normal normal-case">(optional)</span></label>
+                          <input type="password" value={sshPassphrase} onChange={e => setSshPassphrase(e.target.value)}
+                            className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                            placeholder="Leave blank if key has no passphrase" />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Advanced Settings Accordion */}
+                    <div className="border border-outline-variant/40 rounded overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setSshShowAdvanced(!sshShowAdvanced)}
+                        className="w-full flex items-center justify-between px-3 py-2 bg-surface-container text-[9px] font-bold text-on-surface-variant uppercase font-mono tracking-wider hover:bg-surface-container-high transition-colors cursor-pointer"
+                      >
+                        <span>⚙️ Advanced Settings</span>
+                        {sshShowAdvanced ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
+                      </button>
+                      {sshShowAdvanced && (
+                        <div className="p-3 space-y-3 bg-surface-container-lowest">
+
+                          {/* Working Dir + Timeouts */}
+                          <div className="grid grid-cols-3 gap-3">
+                            <div className="col-span-3">
+                              <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Default Working Directory</label>
+                              <input type="text" value={sshWorkDir} onChange={e => setSshWorkDir(e.target.value)}
+                                className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                                placeholder="/home/ubuntu" />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Connection Timeout (s)</label>
+                              <input type="number" value={sshConnTimeout} onChange={e => setSshConnTimeout(e.target.value)}
+                                className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                                placeholder="30" />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Command Timeout (s)</label>
+                              <input type="number" value={sshCmdTimeout} onChange={e => setSshCmdTimeout(e.target.value)}
+                                className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                                placeholder="60" />
+                            </div>
+                          </div>
+
+                          {/* Sudo */}
+                          <div className="flex items-center gap-3">
+                            <label className="flex items-center gap-2 cursor-pointer text-xs text-on-surface select-none">
+                              <input type="checkbox" checked={sshUseSudo} onChange={e => setSshUseSudo(e.target.checked)}
+                                className="accent-primary w-3.5 h-3.5 cursor-pointer" />
+                              Use Sudo
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer text-xs text-on-surface select-none">
+                              <input type="checkbox" checked={sshRequireApproval} onChange={e => setSshRequireApproval(e.target.checked)}
+                                className="accent-primary w-3.5 h-3.5 cursor-pointer" />
+                              Require Approval Before Execution
+                            </label>
+                          </div>
+
+                          {sshUseSudo && (
+                            <div>
+                              <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Sudo Password <span className="font-normal normal-case">(optional)</span></label>
+                              <input type="password" value={sshSudoPassword} onChange={e => setSshSudoPassword(e.target.value)}
+                                className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                                placeholder="Leave blank if sudo is passwordless" />
+                            </div>
+                          )}
+
+                          {/* Allowed / Blocked Commands */}
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Allowed Commands <span className="font-normal normal-case">(comma-separated)</span></label>
+                              <input type="text" value={sshAllowedCmds} onChange={e => setSshAllowedCmds(e.target.value)}
+                                className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                                placeholder="ls, cat, systemctl status" />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Blocked Commands <span className="font-normal normal-case">(comma-separated)</span></label>
+                              <input type="text" value={sshBlockedCmds} onChange={e => setSshBlockedCmds(e.target.value)}
+                                className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                                placeholder="rm -rf, shutdown, reboot" />
+                            </div>
+                          </div>
+
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex justify-end">
+                      <button type="submit"
+                        className="px-4 py-1.5 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary">
+                        Connect SSH Server
+                      </button>
+                    </div>
+                  </form>
+
                 /* ─── Generic API Key form (Hunter, Consulti, Mailchimp, Asana, custom built-ins) ─── */
                 ) : (
                   <form onSubmit={handleAddAccount} className="p-4 border border-dashed border-outline-variant/50 rounded bg-surface-container-lowest space-y-3">
@@ -1329,14 +1577,36 @@ export default function ToolDetailPage({ params }) {
                         <p className="text-[9px] text-on-surface-variant mt-0.5">Connected {account.created_at.slice(0, 10)}</p>
                       </div>
                       
-                      {hasPermission("tools.disconnect_account") && (
-                        <button
-                          onClick={() => handleDisconnect(account.id)}
-                          className="p-1 hover:bg-surface-container-highest text-error rounded cursor-pointer"
-                          title="Disconnect Account"
-                        >
-                          <Unplug className="w-3 h-3" />
-                        </button>
+                      {hasPermission("tools.disconnect_account") && account.user_id === user.id && (
+                        <div className="flex items-center gap-1.5">
+                          {confirmingId === account.id ? (
+                            <>
+                              <span className="text-[9px] text-error font-mono">Confirm remove?</span>
+                              <button
+                                onClick={() => handleDisconnect(account.id)}
+                                disabled={disconnectingId === account.id}
+                                className="px-2 py-1 bg-error text-on-error font-bold text-[9px] rounded cursor-pointer hover:brightness-110 active:scale-95 transition-all"
+                              >
+                                {disconnectingId === account.id ? "Removing…" : "Yes, Remove"}
+                              </button>
+                              <button
+                                onClick={() => setConfirmingId(null)}
+                                className="px-2 py-1 bg-surface-container-high text-on-surface font-bold text-[9px] rounded cursor-pointer hover:bg-surface-container-highest transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => handleDisconnect(account.id)}
+                              className="flex items-center gap-1 px-2.5 py-1 text-error border border-error/30 bg-error/5 hover:bg-error/15 font-semibold text-[9px] rounded cursor-pointer transition-all active:scale-95"
+                              title="Disconnect Account"
+                            >
+                              <Unplug className="w-3 h-3" />
+                              Disconnect
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -1430,6 +1700,68 @@ export default function ToolDetailPage({ params }) {
           </div>
         </div>
       </main>
+
+      {showConfirmDelete && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-surface-container border border-error/25 rounded-lg max-w-md w-full p-6 space-y-4 shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-error to-error/50" />
+            
+            <div className="flex items-center gap-3 text-error">
+              <div className="w-10 h-10 rounded-full bg-error/10 flex items-center justify-center border border-error/25">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-on-surface">Delete Custom Tool</h3>
+                <p className="text-xs text-on-surface-variant font-mono uppercase tracking-wider mt-0.5">Dangerous Action</p>
+              </div>
+            </div>
+
+            <div className="space-y-2 text-xs leading-relaxed text-on-surface-variant">
+              <p>
+                Are you absolutely sure you want to permanently delete the custom tool <strong>{tool.name}</strong>?
+              </p>
+              <p className="bg-surface-container-high p-3 rounded border border-outline-variant/30 font-mono text-[11px] text-error flex items-start gap-2">
+                <span className="font-bold">⚠️ Warning:</span> This will permanently delete this tool registry, all its features, and disconnect all associated accounts. This action is irreversible.
+              </p>
+            </div>
+
+            {deleteError && (
+              <div className="p-3 bg-error/15 border border-error/20 rounded text-xs text-error font-mono">
+                {deleteError}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowConfirmDelete(false);
+                  setDeleteError("");
+                }}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-surface-container-high border border-outline-variant text-on-surface-variant font-semibold text-xs rounded hover:bg-surface-container-highest transition-all cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteTool}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-error text-on-error font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer disabled:opacity-60 flex items-center gap-1.5 shadow-md shadow-error/20"
+              >
+                {isDeleting ? (
+                  <span className="animate-pulse">Deleting...</span>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete Permanently
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
