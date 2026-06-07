@@ -6,6 +6,8 @@ const nextConfig = {
     "tmcp.vercel.app",
     "local.brittosoft.site",
   ],
+  // ssh2 uses native Node.js crypto — must not be bundled by Turbopack
+  serverExternalPackages: ["ssh2"],
 };
 
 export default nextConfig;

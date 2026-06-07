@@ -47,6 +47,7 @@ export async function POST(request) {
         id,
         label,
         tool_id,
+        connection_metadata,
         tools (
           id,
           name,
@@ -198,9 +199,15 @@ export async function POST(request) {
     // 6. Load credentials
     const { data: creds } = await supabaseAdmin
       .from("tool_account_credentials")
-      .select("encrypted_access_token, encrypted_refresh_token, encrypted_api_key, encrypted_client_secret")
+      .select(
+        "encrypted_access_token, encrypted_refresh_token, encrypted_api_key, encrypted_client_secret," +
+        "encrypted_private_key, encrypted_private_key_passphrase, encrypted_password, encrypted_sudo_password"
+      )
       .eq("tool_account_id", resolvedAccountId)
       .maybeSingle();
+
+    // Attach non-sensitive connection metadata so tool handlers (e.g. SSH) can read host/port/username
+    toolRecord._connectionMetadata = selectedAccount.connection_metadata || {};
 
     // 7. Run tool router
     const data = await runTool({
