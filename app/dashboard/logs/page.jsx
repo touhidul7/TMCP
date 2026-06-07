@@ -21,6 +21,7 @@ export default function LogsPage() {
   const [activeFilterAgent, setActiveFilterAgent] = useState("All");
   const [activeFilterTool, setActiveFilterTool] = useState("All");
   const [activeFilterStatus, setActiveFilterStatus] = useState("All");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const [selectedAgentId, setSelectedAgentId] = useState(agents[0]?.id || "");
   const [apiKey, setApiKey] = useState("");
@@ -189,6 +190,10 @@ console.log(data);`;
 
   const codePreview = generateCode();
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeFilterAgent, activeFilterTool, activeFilterStatus]);
+
   // Log filtering
   const filteredLogs = logs.filter((log) => {
     const matchesAgent = activeFilterAgent === "All" || log.agent_id === activeFilterAgent;
@@ -196,6 +201,13 @@ console.log(data);`;
     const matchesStatus = activeFilterStatus === "All" || log.status === activeFilterStatus;
     return matchesAgent && matchesTool && matchesStatus;
   });
+
+  const logsPerPage = 50;
+  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / logsPerPage));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const pageStartIndex = (safeCurrentPage - 1) * logsPerPage;
+  const pageEndIndex = pageStartIndex + logsPerPage;
+  const paginatedLogs = filteredLogs.slice(pageStartIndex, pageEndIndex);
 
   return (
     <>
@@ -269,7 +281,7 @@ console.log(data);`;
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-outline-variant/30 font-mono text-xs">
-                    {filteredLogs.map((log) => (
+                    {paginatedLogs.map((log) => (
                       <tr key={log.id} className="hover:bg-surface-container-highest/15 transition-colors">
                         <td className="px-5 py-4 text-on-surface-variant">{(log.timestamp || log.created_at || "").replace("T", " ").slice(0, 19)}</td>
                         <td className="px-5 py-4 font-sans font-semibold text-on-surface">{log.agent_name || agents.find(a => a.id === log.agent_id)?.name || "System"}</td>
@@ -310,6 +322,34 @@ console.log(data);`;
                   </tbody>
                 </table>
               </div>
+              {filteredLogs.length > 0 && (
+                <div className="flex items-center justify-between gap-3 border-t border-outline-variant px-5 py-3 text-xs text-on-surface-variant">
+                  <div className="font-mono text-[10px]">
+                    Showing {pageStartIndex + 1}-{Math.min(pageEndIndex, filteredLogs.length)} of {filteredLogs.length} logs · 50 per page
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                      disabled={safeCurrentPage <= 1}
+                      className="px-3 py-1.5 rounded border border-outline-variant bg-surface-container-low hover:bg-surface-container-high disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      Previous
+                    </button>
+                    <span className="font-mono text-[10px]">
+                      Page {safeCurrentPage} of {totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                      disabled={safeCurrentPage >= totalPages}
+                      className="px-3 py-1.5 rounded border border-outline-variant bg-surface-container-low hover:bg-surface-container-high disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
