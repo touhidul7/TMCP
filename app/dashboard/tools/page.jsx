@@ -13,7 +13,7 @@ export default function ToolsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
 
-  const categories = ["All", "Communication", "Storage", "Productivity", "Enrichment", "Custom"];
+  const categories = ["All", "AI/LLM", "Communication", "Marketing", "Productivity", "Storage", "Enrichment", "Infrastructure", "Payments", "Custom"];
 
   const getAccountCount = (toolId) => {
     return toolAccounts.filter((a) => a.tool_id === toolId).length;

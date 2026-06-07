@@ -26,6 +26,32 @@ export default function ToolDetailPage({ params }) {
   const [accountLabel, setAccountLabel] = useState("");
   const [accountEmail, setAccountEmail] = useState("");
   const [accountKey, setAccountKey] = useState("");
+  const [accountKey2, setAccountKey2] = useState(""); // secondary key (e.g. Twilio Auth Token)
+  const [accountId, setAccountId] = useState("");     // sub-account ID (e.g. GHL Location ID)
+
+  // Custom Email / Gmail App Password fields
+  const [emailProtocol, setEmailProtocol] = useState("IMAP"); // IMAP or POP3
+  const [imapHost, setImapHost] = useState("");
+  const [imapPort, setImapPort] = useState("993");
+  const [imapEncryption, setImapEncryption] = useState("SSL/TLS");
+  const [smtpHost, setSmtpHost] = useState("");
+  const [smtpPort, setSmtpPort] = useState("465");
+  const [smtpEncryption, setSmtpEncryption] = useState("SSL/TLS");
+  const [imapUsername, setImapUsername] = useState("");
+  const [imapPassword, setImapPassword] = useState("");
+
+  // SSH / FTP server fields
+  const [serverHost, setServerHost] = useState("");
+  const [serverPort, setServerPort] = useState("");
+  const [serverUser, setServerUser] = useState("");
+  const [serverPassword, setServerPassword] = useState("");
+  const [serverProtocol, setServerProtocol] = useState("SFTP"); // for FTP tool
+
+  // Connection fields for databases/CRM/marketing tools
+  const [connectionFields, setConnectionFields] = useState({});
+  const setField = (key, val) => {
+    setConnectionFields(prev => ({ ...prev, [key]: val }));
+  };
 
   // Edit tool state
   const [showEdit, setShowEdit] = useState(false);
@@ -120,21 +146,137 @@ export default function ToolDetailPage({ params }) {
     }
   };
 
-  const handleAddAccount = (e) => {
+  const handleAddAccount = async (e) => {
     e.preventDefault();
     if (!accountLabel) return;
 
-    const res = addToolAccount(toolId, accountLabel, {
-      email: accountEmail,
-      key: accountKey
-    });
+    let credentials = {};
+    let resolvedEmail = accountEmail;
+
+    if (tool.slug === "custom-email" || tool.slug === "gmail-app") {
+      credentials = {
+        email: imapUsername,
+        protocol: emailProtocol,
+        incoming_host: imapHost,
+        incoming_port: imapPort,
+        incoming_encryption: imapEncryption,
+        smtp_host: smtpHost,
+        smtp_port: smtpPort,
+        smtp_encryption: smtpEncryption,
+        password: imapPassword,
+      };
+      resolvedEmail = imapUsername;
+    } else if (tool.slug === "ssh") {
+      credentials = { email: serverUser, key: serverPassword, host: serverHost, port: serverPort };
+      resolvedEmail = `${serverUser}@${serverHost}`;
+    } else if (tool.slug === "ftp") {
+      credentials = { email: serverUser, key: serverPassword, host: serverHost, port: serverPort, protocol: serverProtocol };
+      resolvedEmail = `${serverUser}@${serverHost}`;
+    } else if (tool.slug === "twilio") {
+      credentials = { email: accountEmail || "twilio-account", key: accountKey, auth_token: accountKey2 };
+    } else if (tool.slug === "ghl") {
+      credentials = { email: accountEmail || accountId, key: accountKey, location_id: accountId };
+    } else if (tool.slug === "slack") {
+      credentials = { key: accountKey, email: "slack-bot" };
+    } else if (tool.slug === "github") {
+      credentials = { key: accountKey, email: accountEmail || "github-pat" };
+    } else if (tool.slug === "resend") {
+      credentials = { key: accountKey, domain_name: accountEmail };
+      resolvedEmail = accountEmail; // This is the domain name
+    } else if (["postgresql", "mysql", "oracle"].includes(tool.slug)) {
+      credentials = {
+        host: connectionFields.host || "",
+        port: connectionFields.port || (tool.slug === "postgresql" ? "5432" : tool.slug === "mysql" ? "3306" : "1521"),
+        database: connectionFields.database || "",
+        username: connectionFields.username || "",
+        password: connectionFields.password || "",
+        ssl: connectionFields.ssl || "Disable",
+        sid: connectionFields.sid || "",
+      };
+      resolvedEmail = `${credentials.username}@${credentials.host}/${credentials.database || credentials.sid || ""}`;
+    } else if (tool.slug === "redis") {
+      credentials = {
+        host: connectionFields.host || "",
+        port: connectionFields.port || "6379",
+        password: connectionFields.password || "",
+        ssl: connectionFields.ssl === "true",
+      };
+      resolvedEmail = `redis://${credentials.host}:${credentials.port}`;
+    } else if (tool.slug === "mongodb") {
+      credentials = {
+        uri: connectionFields.uri || "",
+      };
+      // Mask connection URI password for display
+      resolvedEmail = credentials.uri.replace(/\/\/([^:]+):([^@]+)@/, "//***:***@");
+    } else if (tool.slug === "salesforce") {
+      credentials = {
+        environment: connectionFields.environment || "Production",
+        client_id: connectionFields.client_id || "",
+        client_secret: connectionFields.client_secret || "",
+        username: connectionFields.username || "",
+        password: connectionFields.password || "",
+        security_token: connectionFields.security_token || "",
+      };
+      resolvedEmail = `${credentials.username} [${credentials.environment}]`;
+    } else if (tool.slug === "jira") {
+      credentials = {
+        instance_url: connectionFields.instance_url || "",
+        email: connectionFields.email || "",
+        api_token: connectionFields.api_token || "",
+      };
+      resolvedEmail = `${credentials.email} (${credentials.instance_url.replace(/^https?:\/\//, '')})`;
+    } else if (tool.slug === "shopify") {
+      credentials = {
+        shop_domain: connectionFields.shop_domain || "",
+        access_token: connectionFields.access_token || "",
+      };
+      resolvedEmail = credentials.shop_domain;
+    } else if (tool.slug === "activecampaign") {
+      credentials = {
+        api_url: connectionFields.api_url || "",
+        key: connectionFields.api_key || "",
+      };
+      resolvedEmail = credentials.api_url.replace(/^https?:\/\//, '');
+    } else if (tool.slug === "bigquery") {
+      credentials = {
+        project_id: connectionFields.project_id || "",
+        key: connectionFields.service_account_key || "",
+        dataset: connectionFields.dataset || "",
+      };
+      resolvedEmail = `bigquery://${credentials.project_id}`;
+    } else if (tool.slug === "mailchimp") {
+      credentials = {
+        key: accountKey,
+        data_center: accountEmail || "us1",
+      };
+      resolvedEmail = `mailchimp-${accountEmail || "us1"}`;
+    } else if (tool.slug === "asana") {
+      credentials = { key: accountKey };
+      resolvedEmail = "asana-connected";
+    } else if (tool.slug === "serper") {
+      credentials = { key: accountKey };
+      resolvedEmail = "serper-connected";
+    } else if (tool.slug === "scrapedo") {
+      credentials = { key: accountKey };
+      resolvedEmail = "scrapedo-connected";
+    } else if (["openrouter", "anthropic", "openai", "apify", "stitch", "notion", "airtable", "hubspot", "stripe", "linear"].includes(tool.slug)) {
+      credentials = { key: accountKey };
+      resolvedEmail = `${tool.slug}-connected`;
+    } else {
+      credentials = { email: accountEmail, key: accountKey };
+    }
+
+    const res = await addToolAccount(toolId, accountLabel, { ...credentials, email: resolvedEmail });
 
     if (res.error) {
       alert(res.error);
     } else {
-      setAccountLabel("");
-      setAccountEmail("");
-      setAccountKey("");
+      // Reset all fields
+      setAccountLabel(""); setAccountEmail(""); setAccountKey(""); setAccountKey2(""); setAccountId("");
+      setImapHost(""); setImapPort("993"); setSmtpHost(""); setSmtpPort("465");
+      setImapUsername(""); setImapPassword(""); setEmailProtocol("IMAP");
+      setServerHost(""); setServerPort(""); setServerUser(""); setServerPassword("");
+      setConnectionFields({});
       setShowAddAccount(false);
     }
   };
@@ -451,11 +593,11 @@ export default function ToolDetailPage({ params }) {
               </div>
 
               {showAddAccount && (
-                isBuiltIn ? (
-                  /* Google OAuth flow */
+                /* ─── Google OAuth tools ─── */
+                ["gmail", "drive", "sheets", "calendar"].includes(tool.slug) ? (
                   <div className="p-4 border border-dashed border-primary/30 rounded bg-surface-container-lowest space-y-3">
                     <p className="text-xs text-on-surface-variant leading-relaxed">
-                      This tool requires Google OAuth. Click below to authenticate and authorize access.
+                      This tool uses <strong>Google OAuth 2.0</strong>. Click below to authenticate and grant access via your Google account.
                     </p>
                     <button
                       onClick={handleConnectGoogle}
@@ -464,49 +606,702 @@ export default function ToolDetailPage({ params }) {
                       Connect with Google OAuth
                     </button>
                   </div>
-                ) : (
-                  /* API Key / credentials form */
-                  <form onSubmit={handleAddAccount} className="p-4 border border-dashed border-outline-variant/50 rounded bg-surface-container-lowest space-y-3">
+
+                /* ─── Custom Email / Gmail App Password form ─── */
+                ) : ["custom-email", "gmail-app"].includes(tool.slug) ? (
+                  <form onSubmit={handleAddAccount} className="p-4 border border-dashed border-outline-variant/50 rounded bg-surface-container-lowest space-y-4">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-[9px] font-bold text-on-surface-variant uppercase font-mono tracking-wider">
+                        {tool.slug === "gmail-app" ? "Gmail App Password Setup" : "Custom Email Server Configuration"}
+                      </p>
+                      <span className="text-[8px] font-mono bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded">AES-256 ENCRYPTED</span>
+                    </div>
+
+                    {/* Protocol selector — only for custom-email */}
+                    {tool.slug === "custom-email" && (
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Incoming Protocol *</label>
+                        <div className="flex gap-2">
+                          {["IMAP", "POP3"].map(proto => (
+                            <button
+                              key={proto}
+                              type="button"
+                              onClick={() => {
+                                setEmailProtocol(proto);
+                                setImapPort(proto === "IMAP" ? "993" : "995");
+                              }}
+                              className={`flex-1 py-1.5 text-xs font-bold rounded border transition-all cursor-pointer ${
+                                emailProtocol === proto
+                                  ? "bg-primary text-on-primary border-primary glow-primary"
+                                  : "bg-surface-container-low text-on-surface-variant border-outline-variant hover:border-primary"
+                              }`}
+                            >
+                              {proto}
+                              <span className="ml-1 font-mono text-[9px] opacity-70">
+                                ({proto === "IMAP" ? "port 993" : "port 995"})
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                        <p className="text-[9px] text-on-surface-variant mt-1">
+                          <strong>IMAP</strong> keeps emails on the server (recommended). <strong>POP3</strong> downloads and optionally removes them.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Account Label */}
+                    <div>
+                      <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Label *</label>
+                      <input type="text" value={accountLabel} onChange={e => setAccountLabel(e.target.value)} required
+                        className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                        placeholder="e.g. Support Inbox" />
+                    </div>
+
+                    {/* Username & Password */}
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Label</label>
-                        <input
-                          type="text"
-                          value={accountLabel}
-                          onChange={(e) => setAccountLabel(e.target.value)}
-                          required
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Email / Username *</label>
+                        <input type="email" value={imapUsername} onChange={e => setImapUsername(e.target.value)} required
                           className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
-                          placeholder="e.g. Clients Support Email"
-                        />
+                          placeholder="user@example.com" />
                       </div>
                       <div>
-                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Email / ID</label>
-                        <input
-                          type="text"
-                          value={accountEmail}
-                          onChange={(e) => setAccountEmail(e.target.value)}
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Password / App Password *</label>
+                        <input type="password" value={imapPassword} onChange={e => setImapPassword(e.target.value)} required
                           className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
-                          placeholder="support@company.com"
-                        />
+                          placeholder="••••••••••••••••" />
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">API Key or Password (AES Encrypted)</label>
-                      <input
-                        type="password"
-                        value={accountKey}
-                        onChange={(e) => setAccountKey(e.target.value)}
-                        className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
-                        placeholder="••••••••••••••••"
-                      />
-                    </div>
+                    {tool.slug !== "gmail-app" && (
+                      <>
+                        {/* Incoming Server */}
+                        <div className="p-3 bg-surface-container border border-outline-variant/40 rounded space-y-3">
+                          <p className="text-[9px] font-bold text-on-surface-variant uppercase font-mono tracking-wider">📥 Incoming Mail ({emailProtocol})</p>
+                          <div className="grid grid-cols-3 gap-3">
+                            <div className="col-span-2">
+                              <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">{emailProtocol} Server Host *</label>
+                              <input type="text" value={imapHost} onChange={e => setImapHost(e.target.value)} required={tool.slug !== "gmail-app"}
+                                className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                                placeholder={emailProtocol === "IMAP" ? "imap.gmail.com" : "pop.gmail.com"} />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Port</label>
+                              <input type="number" value={imapPort} onChange={e => setImapPort(e.target.value)} required={tool.slug !== "gmail-app"}
+                                className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                                placeholder={emailProtocol === "IMAP" ? "993" : "995"} />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Encryption</label>
+                            <select value={imapEncryption} onChange={e => setImapEncryption(e.target.value)}
+                              className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none cursor-pointer font-mono">
+                              <option>SSL/TLS</option>
+                              <option>STARTTLS</option>
+                              <option>None</option>
+                            </select>
+                          </div>
+                        </div>
 
+                        {/* SMTP Outgoing Server */}
+                        <div className="p-3 bg-surface-container border border-outline-variant/40 rounded space-y-3">
+                          <p className="text-[9px] font-bold text-on-surface-variant uppercase font-mono tracking-wider">📤 Outgoing Mail (SMTP)</p>
+                          <div className="grid grid-cols-3 gap-3">
+                            <div className="col-span-2">
+                              <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">SMTP Server Host *</label>
+                              <input type="text" value={smtpHost} onChange={e => setSmtpHost(e.target.value)} required={tool.slug !== "gmail-app"}
+                                className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                                placeholder="smtp.gmail.com" />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Port</label>
+                              <input type="number" value={smtpPort} onChange={e => setSmtpPort(e.target.value)} required={tool.slug !== "gmail-app"}
+                                className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                                placeholder="465" />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Encryption</label>
+                            <select value={smtpEncryption} onChange={e => setSmtpEncryption(e.target.value)}
+                              className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none cursor-pointer font-mono">
+                              <option>SSL/TLS</option>
+                              <option>STARTTLS</option>
+                              <option>None</option>
+                            </select>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    <div className="flex justify-end">
+                      <button type="submit"
+                        className="px-4 py-1.5 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary">
+                        Connect Email Account
+                      </button>
+                    </div>
+                  </form>
+
+                /* ─── Slack Bot Token form ─── */
+                ) : tool.slug === "slack" ? (
+                  <form onSubmit={handleAddAccount} className="p-4 border border-dashed border-outline-variant/50 rounded bg-surface-container-lowest space-y-3">
+                    <p className="text-[9px] font-bold text-on-surface-variant uppercase font-mono tracking-wider mb-1">Slack Bot Configuration</p>
+                    <div>
+                      <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Label *</label>
+                      <input type="text" value={accountLabel} onChange={e => setAccountLabel(e.target.value)} required
+                        className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                        placeholder="e.g. Company Slack Workspace" />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Slack Bot Token *</label>
+                      <input type="password" value={accountKey} onChange={e => setAccountKey(e.target.value)} required
+                        className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                        placeholder="xoxb-••••••••••••••" />
+                      <p className="text-[9px] text-on-surface-variant mt-1">Get from <strong>api.slack.com/apps</strong> → OAuth &amp; Permissions → Bot User OAuth Token</p>
+                    </div>
+                    <div className="flex justify-end">
+                      <button type="submit"
+                        className="px-4 py-1.5 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary">
+                        Connect Slack Bot
+                      </button>
+                    </div>
+                  </form>
+
+                /* ─── GitHub PAT form ─── */
+                ) : tool.slug === "github" ? (
+                  <form onSubmit={handleAddAccount} className="p-4 border border-dashed border-outline-variant/50 rounded bg-surface-container-lowest space-y-3">
+                    <p className="text-[9px] font-bold text-on-surface-variant uppercase font-mono tracking-wider mb-1">GitHub Account Configuration</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Label *</label>
+                        <input type="text" value={accountLabel} onChange={e => setAccountLabel(e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                          placeholder="e.g. Company GitHub Org" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">GitHub Username</label>
+                        <input type="text" value={accountEmail} onChange={e => setAccountEmail(e.target.value)}
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                          placeholder="octocat" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Personal Access Token (PAT) *</label>
+                      <input type="password" value={accountKey} onChange={e => setAccountKey(e.target.value)} required
+                        className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                        placeholder="ghp_••••••••••••••••" />
+                      <p className="text-[9px] text-on-surface-variant mt-1">Get from <strong>github.com/settings/tokens</strong> → Generate new token (classic or fine-grained)</p>
+                    </div>
+                    <div className="flex justify-end">
+                      <button type="submit"
+                        className="px-4 py-1.5 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary">
+                        Connect GitHub Account
+                      </button>
+                    </div>
+                  </form>
+
+                /* ─── Twilio Credential Form ─── */
+                ) : tool.slug === "twilio" ? (
+                  <form onSubmit={handleAddAccount} className="p-4 border border-dashed border-outline-variant/50 rounded bg-surface-container-lowest space-y-3">
+                    <p className="text-[9px] font-bold text-on-surface-variant uppercase font-mono tracking-wider mb-1">Twilio API Settings</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Label *</label>
+                        <input type="text" value={accountLabel} onChange={e => setAccountLabel(e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                          placeholder="e.g. Sales Twilio Account" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Twilio Account Name / Email</label>
+                        <input type="text" value={accountEmail} onChange={e => setAccountEmail(e.target.value)}
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                          placeholder="sales@company.com" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account SID *</label>
+                        <input type="password" value={accountKey} onChange={e => setAccountKey(e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                          placeholder="AC••••••••••••••••••••••••••••••••" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Auth Token *</label>
+                        <input type="password" value={accountKey2} onChange={e => setAccountKey2(e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                          placeholder="••••••••••••••••••••••••••••••••" />
+                      </div>
+                    </div>
+                    <div className="flex justify-end">
+                      <button type="submit"
+                        className="px-4 py-1.5 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary">
+                        Connect Twilio Account
+                      </button>
+                    </div>
+                  </form>
+
+                /* ─── GoHighLevel Credential Form ─── */
+                ) : tool.slug === "ghl" ? (
+                  <form onSubmit={handleAddAccount} className="p-4 border border-dashed border-outline-variant/50 rounded bg-surface-container-lowest space-y-3">
+                    <p className="text-[9px] font-bold text-on-surface-variant uppercase font-mono tracking-wider mb-1">GoHighLevel (GHL) Settings</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Label *</label>
+                        <input type="text" value={accountLabel} onChange={e => setAccountLabel(e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                          placeholder="e.g. Sub-Account Lead Gen" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Location / Sub-Account ID *</label>
+                        <input type="text" value={accountId} onChange={e => setAccountId(e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                          placeholder="Location ID" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">API Key / Access Token *</label>
+                      <input type="password" value={accountKey} onChange={e => setAccountKey(e.target.value)} required
+                        className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                        placeholder="API Key" />
+                    </div>
+                    <div className="flex justify-end">
+                      <button type="submit"
+                        className="px-4 py-1.5 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary">
+                        Connect GHL Sub-Account
+                      </button>
+                    </div>
+                  </form>
+
+                /* ─── Resend Connection Form (API Key + Domain Name) ─── */
+                ) : tool.slug === "resend" ? (
+                  <form onSubmit={handleAddAccount} className="p-4 border border-dashed border-outline-variant/50 rounded bg-surface-container-lowest space-y-3">
+                    <p className="text-[9px] font-bold text-on-surface-variant uppercase font-mono tracking-wider mb-1">Resend Connection Settings</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Label *</label>
+                        <input type="text" value={accountLabel} onChange={e => setAccountLabel(e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                          placeholder="e.g. My Website Resend" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Verified Domain Name *</label>
+                        <input type="text" value={accountEmail} onChange={e => setAccountEmail(e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                          placeholder="example.com" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">API Key (re_••••••••) *</label>
+                      <input type="password" value={accountKey} onChange={e => setAccountKey(e.target.value)} required
+                        className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                        placeholder="re_••••••••••••••••••••" />
+                    </div>
+                    <div className="flex justify-end">
+                      <button type="submit"
+                        className="px-4 py-1.5 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary">
+                        Connect Resend Account
+                      </button>
+                    </div>
+                  </form>
+
+                /* ─── SQL Databases Form (PostgreSQL, MySQL, Oracle) ─── */
+                ) : ["postgresql", "mysql", "oracle"].includes(tool.slug) ? (
+                  <form onSubmit={handleAddAccount} className="p-4 border border-dashed border-outline-variant/50 rounded bg-surface-container-lowest space-y-3">
+                    <p className="text-[9px] font-bold text-on-surface-variant uppercase font-mono tracking-wider mb-1">{tool.name} Connection Configuration</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Label *</label>
+                        <input type="text" value={accountLabel} onChange={e => setAccountLabel(e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                          placeholder="e.g. Production Database" />
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="col-span-2">
+                          <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Host *</label>
+                          <input type="text" value={connectionFields.host || ""} onChange={e => setField("host", e.target.value)} required
+                            className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                            placeholder="localhost" />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Port</label>
+                          <input type="number" value={connectionFields.port || ""} onChange={e => setField("port", e.target.value)}
+                            className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                            placeholder={tool.slug === "postgresql" ? "5432" : tool.slug === "mysql" ? "3306" : "1521"} />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">{tool.slug === "oracle" ? "SID / Service Name *" : "Database Name *"}</label>
+                        <input type="text" value={tool.slug === "oracle" ? (connectionFields.sid || "") : (connectionFields.database || "")} 
+                          onChange={e => setField(tool.slug === "oracle" ? "sid" : "database", e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                          placeholder={tool.slug === "oracle" ? "ORCL" : "my_db"} />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Username *</label>
+                        <input type="text" value={connectionFields.username || ""} onChange={e => setField("username", e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                          placeholder="root" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Password *</label>
+                        <input type="password" value={connectionFields.password || ""} onChange={e => setField("password", e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                          placeholder="••••••••••••••••" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">SSL Mode</label>
+                      <select value={connectionFields.ssl || "Disable"} onChange={e => setField("ssl", e.target.value)}
+                        className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none cursor-pointer font-mono">
+                        <option>Disable</option>
+                        <option>Require</option>
+                        <option>Prefer</option>
+                        <option>Allow</option>
+                      </select>
+                    </div>
+                    <div className="flex justify-end">
+                      <button type="submit"
+                        className="px-4 py-1.5 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary">
+                        Connect Database
+                      </button>
+                    </div>
+                  </form>
+
+                /* ─── Redis Connection Form ─── */
+                ) : tool.slug === "redis" ? (
+                  <form onSubmit={handleAddAccount} className="p-4 border border-dashed border-outline-variant/50 rounded bg-surface-container-lowest space-y-3">
+                    <p className="text-[9px] font-bold text-on-surface-variant uppercase font-mono tracking-wider mb-1">Redis Database Connection</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Label *</label>
+                        <input type="text" value={accountLabel} onChange={e => setAccountLabel(e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                          placeholder="e.g. Cache Cluster" />
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="col-span-2">
+                          <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Host *</label>
+                          <input type="text" value={connectionFields.host || ""} onChange={e => setField("host", e.target.value)} required
+                            className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                            placeholder="localhost" />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Port</label>
+                          <input type="number" value={connectionFields.port || ""} onChange={e => setField("port", e.target.value)}
+                            className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                            placeholder="6379" />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Password (Optional)</label>
+                        <input type="password" value={connectionFields.password || ""} onChange={e => setField("password", e.target.value)}
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                          placeholder="••••••••••••••••" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">SSL / TLS Connection</label>
+                        <select value={connectionFields.ssl || "false"} onChange={e => setField("ssl", e.target.value)}
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none cursor-pointer font-mono">
+                          <option value="false">Disable</option>
+                          <option value="true">Enable SSL/TLS</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex justify-end">
+                      <button type="submit"
+                        className="px-4 py-1.5 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary">
+                        Connect Redis Key-Store
+                      </button>
+                    </div>
+                  </form>
+
+                /* ─── MongoDB Connection Form ─── */
+                ) : tool.slug === "mongodb" ? (
+                  <form onSubmit={handleAddAccount} className="p-4 border border-dashed border-outline-variant/50 rounded bg-surface-container-lowest space-y-3">
+                    <p className="text-[9px] font-bold text-on-surface-variant uppercase font-mono tracking-wider mb-1">MongoDB Connection</p>
+                    <div>
+                      <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Label *</label>
+                      <input type="text" value={accountLabel} onChange={e => setAccountLabel(e.target.value)} required
+                        className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                        placeholder="e.g. MongoDB Atlas Primary" />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">MongoDB Connection URI *</label>
+                      <input type="text" value={connectionFields.uri || ""} onChange={e => setField("uri", e.target.value)} required
+                        className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                        placeholder="mongodb+srv://username:password@cluster.xxxx.mongodb.net/database" />
+                      <p className="text-[9px] text-on-surface-variant mt-1">Make sure user credentials and DB targets are structured inside the Connection URI.</p>
+                    </div>
+                    <div className="flex justify-end">
+                      <button type="submit"
+                        className="px-4 py-1.5 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary">
+                        Connect MongoDB Cluster
+                      </button>
+                    </div>
+                  </form>
+
+                /* ─── Salesforce Integration Form ─── */
+                ) : tool.slug === "salesforce" ? (
+                  <form onSubmit={handleAddAccount} className="p-4 border border-dashed border-outline-variant/50 rounded bg-surface-container-lowest space-y-3">
+                    <p className="text-[9px] font-bold text-on-surface-variant uppercase font-mono tracking-wider mb-1">Salesforce API Configuration</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Label *</label>
+                        <input type="text" value={accountLabel} onChange={e => setAccountLabel(e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                          placeholder="e.g. Corporate Salesforce" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Environment Mode</label>
+                        <select value={connectionFields.environment || "Production"} onChange={e => setField("environment", e.target.value)}
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none cursor-pointer">
+                          <option>Production</option>
+                          <option>Sandbox</option>
+                          <option>Developer Edition</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Consumer Key (Client ID) *</label>
+                        <input type="text" value={connectionFields.client_id || ""} onChange={e => setField("client_id", e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                          placeholder="Client ID from Connected App" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Consumer Secret (Client Secret) *</label>
+                        <input type="password" value={connectionFields.client_secret || ""} onChange={e => setField("client_secret", e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                          placeholder="Client Secret" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Username *</label>
+                        <input type="text" value={connectionFields.username || ""} onChange={e => setField("username", e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                          placeholder="user@company.salesforce.com" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Password *</label>
+                        <input type="password" value={connectionFields.password || ""} onChange={e => setField("password", e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                          placeholder="••••••••••••••••" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Security Token *</label>
+                        <input type="password" value={connectionFields.security_token || ""} onChange={e => setField("security_token", e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                          placeholder="Token (case-sensitive)" />
+                      </div>
+                    </div>
+                    <div className="flex justify-end">
+                      <button type="submit"
+                        className="px-4 py-1.5 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary">
+                        Connect Salesforce App
+                      </button>
+                    </div>
+                  </form>
+
+                /* ─── Jira Integration Form ─── */
+                ) : tool.slug === "jira" ? (
+                  <form onSubmit={handleAddAccount} className="p-4 border border-dashed border-outline-variant/50 rounded bg-surface-container-lowest space-y-3">
+                    <p className="text-[9px] font-bold text-on-surface-variant uppercase font-mono tracking-wider mb-1">Jira Server Integration</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Label *</label>
+                        <input type="text" value={accountLabel} onChange={e => setAccountLabel(e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                          placeholder="e.g. Company Jira Cloud" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Jira Instance URL *</label>
+                        <input type="text" value={connectionFields.instance_url || ""} onChange={e => setField("instance_url", e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                          placeholder="https://company.atlassian.net" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Email Address *</label>
+                        <input type="email" value={connectionFields.email || ""} onChange={e => setField("email", e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                          placeholder="developer@company.com" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Atlassian API Token *</label>
+                        <input type="password" value={connectionFields.api_token || ""} onChange={e => setField("api_token", e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                          placeholder="Token from Atlassian profile settings" />
+                      </div>
+                    </div>
+                    <div className="flex justify-end">
+                      <button type="submit"
+                        className="px-4 py-1.5 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary">
+                        Connect Jira Project
+                      </button>
+                    </div>
+                  </form>
+
+                /* ─── Shopify Connection Form ─── */
+                ) : tool.slug === "shopify" ? (
+                  <form onSubmit={handleAddAccount} className="p-4 border border-dashed border-outline-variant/50 rounded bg-surface-container-lowest space-y-3">
+                    <p className="text-[9px] font-bold text-on-surface-variant uppercase font-mono tracking-wider mb-1">Shopify Store API Settings</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Label *</label>
+                        <input type="text" value={accountLabel} onChange={e => setAccountLabel(e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                          placeholder="e.g. Staging Shopify Store" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Shopify Store Domain *</label>
+                        <input type="text" value={connectionFields.shop_domain || ""} onChange={e => setField("shop_domain", e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                          placeholder="my-shop.myshopify.com" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Admin API Access Token *</label>
+                      <input type="password" value={connectionFields.access_token || ""} onChange={e => setField("access_token", e.target.value)} required
+                        className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                        placeholder="shpat_••••••••••••••••••••••••••••••••" />
+                      <p className="text-[9px] text-on-surface-variant mt-1">Generate inside Shopify Admin panel → Settings → Apps and sales channels → Develop apps.</p>
+                    </div>
+                    <div className="flex justify-end">
+                      <button type="submit"
+                        className="px-4 py-1.5 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary">
+                        Connect Shopify Store
+                      </button>
+                    </div>
+                  </form>
+
+                /* ─── ActiveCampaign Connection Form ─── */
+                ) : tool.slug === "activecampaign" ? (
+                  <form onSubmit={handleAddAccount} className="p-4 border border-dashed border-outline-variant/50 rounded bg-surface-container-lowest space-y-3">
+                    <p className="text-[9px] font-bold text-on-surface-variant uppercase font-mono tracking-wider mb-1">ActiveCampaign Connection Settings</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Label *</label>
+                        <input type="text" value={accountLabel} onChange={e => setAccountLabel(e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                          placeholder="e.g. Corporate ActiveCampaign" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">API URL Endpoint *</label>
+                        <input type="text" value={connectionFields.api_url || ""} onChange={e => setField("api_url", e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                          placeholder="https://company.api-us1.com" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">API Key *</label>
+                      <input type="password" value={connectionFields.api_key || ""} onChange={e => setField("api_key", e.target.value)} required
+                        className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                        placeholder="Key from Settings → Developer page" />
+                    </div>
+                    <div className="flex justify-end">
+                      <button type="submit"
+                        className="px-4 py-1.5 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary">
+                        Connect ActiveCampaign
+                      </button>
+                    </div>
+                  </form>
+
+                /* ─── Google BigQuery Form ─── */
+                ) : tool.slug === "bigquery" ? (
+                  <form onSubmit={handleAddAccount} className="p-4 border border-dashed border-outline-variant/50 rounded bg-surface-container-lowest space-y-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-[9px] font-bold text-on-surface-variant uppercase font-mono tracking-wider">Google BigQuery Connection</p>
+                      <span className="text-[8px] font-mono bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded">SERVICE ACCOUNT</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Label *</label>
+                        <input type="text" value={accountLabel} onChange={e => setAccountLabel(e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                          placeholder="e.g. Analytics BigQuery" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">GCP Project ID *</label>
+                        <input type="text" value={connectionFields.project_id || ""} onChange={e => setField("project_id", e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                          placeholder="my-project-123456" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Default Dataset (Optional)</label>
+                      <input type="text" value={connectionFields.dataset || ""} onChange={e => setField("dataset", e.target.value)}
+                        className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                        placeholder="analytics_v2" />
+                      <p className="text-[9px] text-on-surface-variant mt-1">If set, queries will default to this dataset unless overridden per call.</p>
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Service Account Key (JSON) *</label>
+                      <textarea
+                        value={connectionFields.service_account_key || ""}
+                        onChange={e => setField("service_account_key", e.target.value)}
+                        required
+                        rows={5}
+                        className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none resize-none font-mono"
+                        placeholder={'{\n  "type": "service_account",\n  "project_id": "...",\n  "private_key": "...",\n  ...\n}'}
+                      />
+                      <p className="text-[9px] text-on-surface-variant mt-1">Paste the full JSON from <strong>GCP Console → IAM → Service Accounts → Keys → Add Key (JSON)</strong>. Stored AES-256 encrypted.</p>
+                    </div>
+                    <div className="flex justify-end">
+                      <button type="submit"
+                        className="px-4 py-1.5 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary">
+                        Connect BigQuery Project
+                      </button>
+                    </div>
+                  </form>
+
+                /* ─── Generic API Key form (Hunter, Consulti, Mailchimp, Asana, custom built-ins) ─── */
+                ) : (
+                  <form onSubmit={handleAddAccount} className="p-4 border border-dashed border-outline-variant/50 rounded bg-surface-container-lowest space-y-3">
+                    {["asana", "serper", "scrapedo", "openrouter", "anthropic", "openai", "apify", "stitch", "notion", "airtable", "hubspot", "stripe", "linear"].includes(tool.slug) ? (
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Label *</label>
+                        <input type="text" value={accountLabel} onChange={e => setAccountLabel(e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                          placeholder="e.g. Main Account" />
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Label *</label>
+                          <input type="text" value={accountLabel} onChange={e => setAccountLabel(e.target.value)} required
+                            className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                            placeholder="e.g. Main Account" />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">
+                            {tool.slug === "mailchimp" ? "Data Center (e.g. us19) *" : "Account Email / ID"}
+                          </label>
+                          <input type="text" value={accountEmail} onChange={e => setAccountEmail(e.target.value)} required={tool.slug === "mailchimp"}
+                            className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                            placeholder={tool.slug === "mailchimp" ? "us19" : "support@company.com"} />
+                        </div>
+                      </div>
+                    )}
+                    <div>
+                      <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">
+                        {tool.slug === "asana" ? "Personal Access Token (PAT) *" 
+                         : tool.slug === "mailchimp" ? "API Key *" 
+                         : tool.slug === "serper" ? "API Key *" 
+                         : tool.slug === "scrapedo" ? "API Token *"
+                         : "API Key / Access Token (AES-256 Encrypted) *"}
+                      </label>
+                      <input type="password" value={accountKey} onChange={e => setAccountKey(e.target.value)} required
+                        className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                        placeholder="••••••••••••••••" />
+                    </div>
                     <div className="flex justify-end gap-2">
-                      <button
-                        type="submit"
-                        className="px-4 py-1.5 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary"
-                      >
+                      <button type="submit"
+                        className="px-4 py-1.5 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary">
                         Authenticate Account
                       </button>
                     </div>
