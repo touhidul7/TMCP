@@ -16,7 +16,7 @@ export async function POST(request) {
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${openrouterKey.trim()}`,
-        "HTTP-Referer": "http://localhost:3000",
+        "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
         "X-Title": "TMCP Tassistant Gateway Verification"
       },
       body: JSON.stringify({

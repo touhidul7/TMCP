@@ -1,0 +1,24 @@
+Error: Tool account not found
+Stack: Error: Tool account not found
+    at DELETE (D:\Development\TMCP\.next\dev\server\chunks\[root-of-the-server]__0_rlp05._.js:369:19)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async AppRouteRouteModule.do (D:\Development\TMCP\node_modules\next\dist\compiled\next-server\app-route-turbo.runtime.dev.js:5:40131)
+    at async AppRouteRouteModule.handle (D:\Development\TMCP\node_modules\next\dist\compiled\next-server\app-route-turbo.runtime.dev.js:5:47411)
+    at async responseGenerator (D:\Development\TMCP\.next\dev\server\chunks\node_modules_next_1gm7urt._.js:17767:38)
+    at async AppRouteRouteModule.handleResponse (D:\Development\TMCP\node_modules\next\dist\compiled\next-server\app-route-turbo.runtime.dev.js:1:228552)
+    at async handleResponse (D:\Development\TMCP\.next\dev\server\chunks\node_modules_next_1gm7urt._.js:17830:32)
+    at async Module.handler (D:\Development\TMCP\.next\dev\server\chunks\node_modules_next_1gm7urt._.js:17884:13)
+    at async DevServer.renderToResponseWithComponentsImpl (D:\Development\TMCP\node_modules\next\dist\server\base-server.js:1462:9)
+    at async DevServer.renderPageComponent (D:\Development\TMCP\node_modules\next\dist\server\base-server.js:1514:24)
+    at async DevServer.renderToResponseImpl (D:\Development\TMCP\node_modules\next\dist\server\base-server.js:1564:32)
+    at async DevServer.pipeImpl (D:\Development\TMCP\node_modules\next\dist\server\base-server.js:1044:25)
+    at async NextNodeServer.handleCatchallRenderRequest (D:\Development\TMCP\node_modules\next\dist\server\next-server.js:338:17)
+    at async DevServer.handleRequestImpl (D:\Development\TMCP\node_modules\next\dist\server\base-server.js:935:17)
+    at async D:\Development\TMCP\node_modules\next\dist\server\dev\next-dev-server.js:394:20
+    at async Span.traceAsyncFn (D:\Development\TMCP\node_modules\next\dist\trace\trace.js:164:20)
+    at async DevServer.handleRequest (D:\Development\TMCP\node_modules\next\dist\server\dev\next-dev-server.js:390:24)
+    at async invokeRender (D:\Development\TMCP\node_modules\next\dist\server\lib\router-server.js:266:21)
+    at async handleRequest (D:\Development\TMCP\node_modules\next\dist\server\lib\router-server.js:465:24)
+    at async requestHandlerImpl (D:\Development\TMCP\node_modules\next\dist\server\lib\router-server.js:514:13)
+    at async Server.requestListener (D:\Development\TMCP\node_modules\next\dist\server\lib\start-server.js:225:13)
+Time: 2026-06-07T16:50:22.334Z

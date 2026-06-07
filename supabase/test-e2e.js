@@ -7,7 +7,7 @@ const crypto = require('crypto');
 
 const SUPABASE_URL = 'https://fuhuaanavqlgplraruon.supabase.co';
 const SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ1aHVhYW5hdnFsZ3BscmFydW9uIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDY4ODEyOSwiZXhwIjoyMDk2MjY0MTI5fQ.7TpwVjqOiPWdAsygUwX8tFaFXnsl0Hx8yTwuWuwBlEg';
-const GATEWAY_URL = 'http://localhost:3000';
+const GATEWAY_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
 const supabase = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 

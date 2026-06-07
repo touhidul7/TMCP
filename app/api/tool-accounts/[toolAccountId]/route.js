@@ -9,7 +9,7 @@ export async function DELETE(request, { params }) {
     // Only the owner of the tool account may delete it
     await requirePermission(user, "tools.disconnect_account");
 
-    const { toolAccountId } = params;
+    const { toolAccountId } = await params;
 
     // Verify the account exists and belongs to the user
     const { data: account, error: accErr } = await supabaseAdmin

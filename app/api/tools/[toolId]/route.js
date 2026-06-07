@@ -8,7 +8,7 @@ export async function DELETE(request, { params }) {
     const user = await requireUser(request);
     await requirePermission(user, "tools.add");
 
-    const { toolId } = params;
+    const { toolId } = await params;
 
     // Verify the tool exists and belongs to the user
     const { data: tool, error: fetchErr } = await supabaseAdmin
