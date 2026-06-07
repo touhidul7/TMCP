@@ -30,7 +30,10 @@ export async function POST(request) {
     );
   }
 
-  const { tool, action, input = {}, tool_account_id } = reqBody;
+  const { tool, action, input = {}, tool_account_id, account_id } = reqBody;
+  // Agents may send either account_id (friendly alias) or tool_account_id (internal name).
+  // Normalize both so future SSH/VPS/shared-hosting accounts can be selected reliably.
+  const requestedAccountId = tool_account_id || account_id;
 
   if (!action) {
     return NextResponse.json(
@@ -67,19 +70,36 @@ export async function POST(request) {
 
     // 2. Find matching account
     let selectedAccount = null;
-    if (tool_account_id) {
-      selectedAccount = accounts.find(a => a.id === tool_account_id);
+    if (requestedAccountId) {
+      selectedAccount = accounts.find(a => a.id === requestedAccountId);
     } else if (tool) {
-      selectedAccount = accounts.find(a => {
+      const matchingAccounts = accounts.filter(a => {
         const slug = a.tools?.slug || "";
         const name = a.tools?.name || "";
         return slug.toLowerCase() === tool.toLowerCase() || name.toLowerCase() === tool.toLowerCase();
       });
+
+      if (matchingAccounts.length > 1) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Multiple connected accounts found for tool '${tool}'. Please provide account_id or tool_account_id.`,
+            accounts: matchingAccounts.map(a => ({
+              account_id: a.id,
+              tool_account_id: a.id,
+              account_label: a.label
+            }))
+          },
+          { status: 400 }
+        );
+      }
+
+      selectedAccount = matchingAccounts[0] || null;
     }
 
     if (!selectedAccount) {
       return NextResponse.json(
-        { success: false, error: `No connected account found for tool: ${tool || 'unknown'}` },
+        { success: false, error: requestedAccountId ? `Connected account not found or not accessible: ${requestedAccountId}` : `No connected account found for tool: ${tool || 'unknown'}` },
         { status: 404 }
       );
     }
@@ -197,7 +217,7 @@ export async function POST(request) {
     }
 
     // 6. Load credentials
-    const { data: creds } = await supabaseAdmin
+    const { data: creds, error: credsError } = await supabaseAdmin
       .from("tool_account_credentials")
       .select(
         "encrypted_access_token, encrypted_refresh_token, encrypted_api_key, encrypted_client_secret," +
@@ -205,6 +225,8 @@ export async function POST(request) {
       )
       .eq("tool_account_id", resolvedAccountId)
       .maybeSingle();
+
+    if (credsError) throw credsError;
 
     // Attach non-sensitive connection metadata so tool handlers (e.g. SSH) can read host/port/username
     toolRecord._connectionMetadata = selectedAccount.connection_metadata || {};

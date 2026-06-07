@@ -42,7 +42,7 @@ export async function POST(request) {
       action = 'tools.list';
     } else if (reqBody.method === 'tools/call') {
       action = 'tools.call';
-      tool_account_id = params.tool_account_id;
+      tool_account_id = params.tool_account_id || params.account_id;
       feature_key = params.feature_key || params.name;
       input = params.input || params.arguments || {};
     } else {
@@ -52,7 +52,7 @@ export async function POST(request) {
   } else {
     // Legacy action-based format
     action = reqBody.action;
-    tool_account_id = reqBody.tool_account_id;
+    tool_account_id = reqBody.tool_account_id || reqBody.account_id;
     feature_key = reqBody.feature_key;
     input = reqBody.input || {};
   }
