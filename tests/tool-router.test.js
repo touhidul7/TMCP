@@ -117,3 +117,28 @@ test('router executes github.create_issue against GitHub API', async () => {
   assert.deepEqual(JSON.parse(calls[0].options.body), { title: 'New issue', body: 'Details' });
   assert.equal(result.issue.number, 8);
 });
+
+test('router executes github.create_repository against GitHub API', async () => {
+  const calls = [];
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url, options });
+    return {
+      ok: true,
+      status: 201,
+      json: async () => ({ full_name: 'tomaiassistant/new-repo', html_url: 'https://github.com/tomaiassistant/new-repo' })
+    };
+  };
+
+  const result = await runTool({
+    tool: { tool_type: 'built_in' },
+    featureKey: 'github.create_repository',
+    input: { name: 'new-repo', description: 'A new repo', private: true, auto_init: true },
+    credentialRecord: credential('gh-secret')
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'https://api.github.com/user/repos');
+  assert.equal(calls[0].options.method, 'POST');
+  assert.deepEqual(JSON.parse(calls[0].options.body), { name: 'new-repo', description: 'A new repo', private: true, auto_init: true });
+  assert.equal(result.repository, 'tomaiassistant/new-repo');
+});

@@ -116,7 +116,8 @@ const featureMap = {
   ],
   github: [
     { feature_key: "github.list_issues", name: "List Issues", description: "List issues in repo", is_dangerous: false, requires_approval: false },
-    { feature_key: "github.create_issue", name: "Create Issue", description: "Create a repository issue", is_dangerous: true, requires_approval: false }
+    { feature_key: "github.create_issue", name: "Create Issue", description: "Create a repository issue", is_dangerous: true, requires_approval: false },
+    { feature_key: "github.create_repository", name: "Create Repository", description: "Create a new repository under the authenticated account or organization", is_dangerous: true, requires_approval: true }
   ],
   openrouter: [
     { feature_key: "openrouter.chat", name: "Chat Completions", description: "Query OpenRouter LLMs", is_dangerous: false, requires_approval: false }
