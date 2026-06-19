@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { Network } from "lucide-react";
+import logo from "../../app/icon.png";
+import Image from "next/image";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -73,9 +75,9 @@ export default function LoginPage() {
 
       <div className="w-full max-w-md space-y-8 glassmorphic p-8 rounded-lg glow-primary relative z-10">
         <div className="flex flex-col items-center">
-          <div className="w-12 h-12 bg-primary rounded flex items-center justify-center mb-3 glow-primary">
-            <Network className="text-on-primary w-5 h-5" />
-          </div>
+          {/* <div className="w-12 h-12 bg-primary rounded flex items-center justify-center mb-3 glow-primary"> */}
+            <Image className="border-2 border-white rounded-md mb-3" src={logo} alt="TMCP Logo" width={48} height={48} />
+          {/* </div> */}
           <h2 className="text-2xl font-bold tracking-tight text-on-surface text-center">
             Sign in to TMCP Gateway
           </h2>
