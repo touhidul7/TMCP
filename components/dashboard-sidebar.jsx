@@ -133,7 +133,7 @@ export default function DashboardSidebar({ mobile = false, onNavigate }) {
         )}
 
         <div className="space-y-2">
-          <a
+          {/* <a
             href="https://docs.google.com/document/d/1AMFSpXXrH0hVG9YY76VYgpTYPJutWbc6gJ6wIOdqN5g/edit?usp=sharing"
             target="_blank"
             rel="noopener noreferrer"
@@ -141,7 +141,7 @@ export default function DashboardSidebar({ mobile = false, onNavigate }) {
           >
             <FileText className="w-3.5 h-3.5" />
             SOP Instructions
-          </a>
+          </a> */}
           <button
             onClick={async () => {
               const { supabase } = await import("@/lib/supabase/client");
