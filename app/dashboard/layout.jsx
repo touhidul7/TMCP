@@ -17,7 +17,8 @@ export default function DashboardLayout({ children }) {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        router.push("/login");
+        setUser(null);
+        router.replace("/login");
       } else {
         setUser(session.user);
       }
@@ -29,7 +30,8 @@ export default function DashboardLayout({ children }) {
     const { data: authListener } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (!session) {
-          router.push("/login");
+          setUser(null);
+          router.replace("/login");
         } else {
           setUser(session.user);
         }
@@ -41,7 +43,9 @@ export default function DashboardLayout({ children }) {
     };
   }, [router]);
 
-  if (loading) {
+  // Never render protected content until we have confirmed an authenticated user.
+  // While loading, or when there is no session (redirect in flight), show the spinner.
+  if (loading || !user) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
         <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
