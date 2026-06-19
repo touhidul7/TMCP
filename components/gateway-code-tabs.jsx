@@ -4,10 +4,12 @@ import { useState } from "react";
 import { Check, Copy } from "lucide-react";
 import { buildGatewaySnippets } from "@/lib/docs/gateway-docs";
 
-export default function GatewayCodeTabs({ baseUrl, toolSlug, featureKey, accountId, compact = false }) {
+export default function GatewayCodeTabs({ baseUrl, toolSlug, featureKey, accountId, compact = false, snippets: snippetsProp }) {
   const [activeTab, setActiveTab] = useState("curl");
   const [copied, setCopied] = useState(false);
-  const snippets = buildGatewaySnippets({ baseUrl, toolSlug, featureKey, accountId });
+  // When explicit snippets are passed (e.g. for GET endpoints) use them directly;
+  // otherwise build the default execute-endpoint snippets from the tool params.
+  const snippets = snippetsProp || buildGatewaySnippets({ baseUrl, toolSlug, featureKey, accountId });
   const tabs = [
     { id: "curl", label: "cURL" },
     { id: "javascript", label: "JS" },

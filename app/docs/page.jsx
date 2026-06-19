@@ -5,16 +5,23 @@ import Link from "next/link";
 import GatewayCodeTabs from "@/components/gateway-code-tabs";
 import { ProductSignal, PublicFooter, PublicHeader } from "@/components/public-shell";
 import { useMockStore } from "@/lib/mock-store";
-import { GATEWAY_ENDPOINTS, buildGatewaySnippets, getGatewaySchemas } from "@/lib/docs/gateway-docs";
+import { GATEWAY_ENDPOINTS, buildGatewaySnippets, buildGetSnippets, getGatewaySchemas } from "@/lib/docs/gateway-docs";
 import { BookOpen, Check, Copy, FileJson, KeyRound, Lock, Network, ShieldCheck, Terminal } from "lucide-react";
 
 const DOC_SECTIONS = [
   { id: "getting-started", label: "Getting Started" },
   { id: "endpoints", label: "Endpoints" },
   { id: "authentication", label: "Authentication" },
-  { id: "examples", label: "Code Examples" },
+  { id: "discovery", label: "Discovery & Status" },
+  { id: "examples", label: "Execute Examples" },
   { id: "schemas", label: "Schemas" },
   { id: "tools", label: "Tool Reference" }
+];
+
+const GET_EXAMPLES = [
+  { path: "/api/gateway/tools", description: "List the connected accounts and feature keys the calling agent is allowed to use." },
+  { path: "/api/gateway/status", description: "Validate the API key and return the active agent identity." },
+  { path: "/api/gateway/docs", description: "Fetch the agent-readable endpoint reference, schemas, and live examples." }
 ];
 
 export default function PublicDocumentationPage() {
@@ -157,13 +164,36 @@ export default function PublicDocumentationPage() {
           </div>
         </section>
 
+        <section id="discovery" className="mx-auto max-w-7xl scroll-mt-28 px-5 pb-10 lg:px-8">
+          <div className="overflow-hidden rounded border border-outline-variant bg-surface-container">
+            <div className="border-b border-outline-variant bg-surface-container-lowest px-6 py-4">
+              <h2 className="text-sm font-bold text-on-surface">Discovery &amp; Status Endpoints</h2>
+              <p className="mt-0.5 text-[10px] font-mono uppercase tracking-wider text-on-surface-variant">
+                GET requests an agent uses to list allowed tools, check identity, and fetch live docs
+              </p>
+            </div>
+            <div className="grid gap-6 p-6 lg:grid-cols-3">
+              {GET_EXAMPLES.map((example) => (
+                <div key={example.path}>
+                  <div className="mb-2 flex items-center gap-2">
+                    <span className="rounded border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 text-[9px] font-mono font-bold text-blue-400">GET</span>
+                    <code className="text-[11px] font-bold text-primary">{example.path}</code>
+                  </div>
+                  <p className="mb-3 text-xs leading-relaxed text-on-surface-variant">{example.description}</p>
+                  <GatewayCodeTabs compact snippets={buildGetSnippets({ baseUrl, path: example.path })} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         <section id="examples" className="mx-auto max-w-7xl scroll-mt-28 px-5 pb-10 lg:px-8">
           <div className="overflow-hidden rounded border border-outline-variant bg-surface-container">
             <div className="flex flex-col justify-between gap-3 border-b border-outline-variant bg-surface-container-lowest px-6 py-4 sm:flex-row sm:items-center">
               <div>
-                <h2 className="text-sm font-bold text-on-surface">Code Examples</h2>
+                <h2 className="text-sm font-bold text-on-surface">Execute Endpoint Examples</h2>
                 <p className="mt-0.5 text-[10px] font-mono uppercase tracking-wider text-on-surface-variant">
-                  cURL, JavaScript, and Python for the current example feature
+                  POST cURL, JavaScript, and Python for the current example feature
                 </p>
               </div>
               <Link href="/login" className="text-xs font-bold text-primary hover:underline">
