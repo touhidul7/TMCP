@@ -56,7 +56,7 @@ export default function DashboardSidebar({ mobile = false, onNavigate }) {
   ];
 
   return (
-    <aside className={`${mobile ? "relative h-full w-full" : "fixed left-0 top-0 hidden h-screen w-[280px] lg:flex"} border-r border-outline-variant bg-surface-container-low flex-col py-4 z-50`}>
+    <aside className={`${mobile ? "relative h-full w-full" : "fixed left-0 top-0 hidden h-screen w-70 lg:flex"} border-r border-outline-variant bg-surface-container-low flex-col py-4 z-50`}>
       {/* Brand Logo & Workspace Switcher */}
       <div className="px-6 mb-8 space-y-4">
         <div>

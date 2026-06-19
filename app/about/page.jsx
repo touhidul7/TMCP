@@ -138,7 +138,7 @@ export default function AboutPage() {
         </section>
 
         {/* Developer */}
-        <section className="mx-auto max-w-7xl px-5 py-16 lg:px-8">
+        <section id="developer" className="mx-auto max-w-7xl px-5 py-16 lg:px-8">
           <div className="grid gap-8 lg:grid-cols-[1fr_1.2fr] lg:items-center">
             <div className="rounded-lg border border-outline-variant bg-surface-container p-8">
               <div className="flex items-center gap-4">

@@ -140,7 +140,7 @@ export function PublicFooter() {
         <span>TMCP / Secure tool gateway for agent operations</span>
         <span className="normal-case tracking-normal">
           Built by{" "}
-          <Link href="/about" className="font-semibold text-on-surface hover:text-primary">
+          <Link href="/about/#developer" className="font-semibold text-on-surface hover:text-primary">
             Touhidul Islam Shadhin
           </Link>
         </span>
