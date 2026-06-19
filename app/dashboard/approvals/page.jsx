@@ -39,7 +39,7 @@ export default function ApprovalsPage() {
     <>
       <DashboardHeader title="Dangerous Action Queue" />
 
-      <main className="p-6 space-y-6 flex-1 overflow-y-auto max-w-6xl">
+      <main className="p-4 sm:p-6 space-y-6 flex-1 overflow-y-auto max-w-6xl">
         <div>
           <h1 className="text-xl font-bold text-on-surface">Tool Call Approvals</h1>
           <p className="text-xs text-on-surface-variant mt-1">

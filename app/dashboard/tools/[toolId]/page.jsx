@@ -4,7 +4,8 @@ import { useState, use, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useMockStore } from "@/lib/mock-store";
 import DashboardHeader from "@/components/dashboard-header";
-import { ArrowLeft, Puzzle, ExternalLink, Unplug, Pencil, X, Check, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
+import GatewayCodeTabs from "@/components/gateway-code-tabs";
+import { ArrowLeft, Puzzle, ExternalLink, Unplug, Pencil, X, Check, ChevronDown, ChevronUp, Trash2, BookOpen } from "lucide-react";
 
 export default function ToolDetailPage({ params }) {
   const router = useRouter();
@@ -115,6 +116,8 @@ export default function ToolDetailPage({ params }) {
   const toolFeatures = features.filter((f) => f.tool_id === toolId);
   const connectedAccounts = toolAccounts.filter((a) => a.tool_id === toolId);
   const toolLogs = logs.filter((l) => l.tool_name.toLowerCase() === tool.name.toLowerCase());
+  const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://your-domain.com";
+  const exampleAccountId = connectedAccounts[0]?.id || "";
 
   const isCustomRest = tool.tool_type === "custom_rest";
   const isCustomMcp  = tool.tool_type === "custom_mcp";
@@ -375,7 +378,7 @@ export default function ToolDetailPage({ params }) {
     <>
       <DashboardHeader title={`Manage ${tool.name}`} />
 
-      <main className="p-6 space-y-6 flex-1 overflow-y-auto max-w-6xl">
+      <main className="p-4 sm:p-6 space-y-6 flex-1 overflow-y-auto max-w-6xl">
         {/* Navigation Breadcrumb */}
         <div className="flex items-center gap-2">
           <button 
@@ -1652,6 +1655,50 @@ export default function ToolDetailPage({ params }) {
                       </div>
                     </div>
                     <p className="text-[11px] text-on-surface-variant mt-1 leading-relaxed">{feat.description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Developer Documentation */}
+            <div className="bg-surface-container border border-outline-variant p-6 rounded space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-bold text-on-surface flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-primary" />
+                    API Documentation
+                  </h3>
+                  <p className="text-[10px] text-on-surface-variant font-mono uppercase tracking-wider mt-0.5">
+                    cURL, JavaScript, and Python examples
+                  </p>
+                </div>
+                {exampleAccountId && (
+                  <span className="px-2 py-0.5 rounded font-mono text-[8px] bg-green-500/10 text-green-400 border border-green-500/20 uppercase font-bold">
+                    Account Selected
+                  </span>
+                )}
+              </div>
+
+              {!exampleAccountId && (
+                <div className="p-3 bg-tertiary/10 border border-tertiary/20 rounded text-[11px] text-on-surface-variant leading-relaxed">
+                  Connect an account to include a concrete <code className="text-primary font-mono">account_id</code> in these examples.
+                </div>
+              )}
+
+              <div className="space-y-4">
+                {toolFeatures.map((feat) => (
+                  <div key={`docs-${feat.id}`} className="space-y-2">
+                    <div>
+                      <code className="text-[11px] font-bold text-primary font-mono">{feat.feature_key}</code>
+                      <p className="text-[11px] text-on-surface-variant mt-1">{feat.description}</p>
+                    </div>
+                    <GatewayCodeTabs
+                      baseUrl={baseUrl}
+                      toolSlug={tool.slug}
+                      featureKey={feat.feature_key}
+                      accountId={exampleAccountId}
+                      compact
+                    />
                   </div>
                 ))}
               </div>

@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 process.env.APP_ENCRYPTION_KEY = '0'.repeat(64);
 
@@ -141,4 +143,72 @@ test('router executes github.create_repository against GitHub API', async () => 
   assert.equal(calls[0].options.method, 'POST');
   assert.deepEqual(JSON.parse(calls[0].options.body), { name: 'new-repo', description: 'A new repo', private: true, auto_init: true });
   assert.equal(result.repository, 'tomaiassistant/new-repo');
+});
+
+test('router executes configured Slack actions', async () => {
+  const postResult = await runTool({
+    tool: { tool_type: 'built_in' },
+    featureKey: 'slack.post_message',
+    input: { channel: '#alerts', message: 'Deploy complete' },
+    credentialRecord: credential('slack-secret')
+  });
+
+  assert.equal(postResult.success, true);
+  assert.equal(postResult.channel, '#alerts');
+  assert.equal(postResult.mode, 'authenticated');
+
+  const listResult = await runTool({
+    tool: { tool_type: 'built_in' },
+    featureKey: 'slack.list_channels',
+    input: {},
+    credentialRecord: credential('slack-secret')
+  });
+
+  assert.equal(listResult.success, true);
+  assert.ok(listResult.channels.length > 0);
+  assert.equal(listResult.mode, 'authenticated');
+});
+
+test('router executes configured IMAP and SMTP actions', async () => {
+  const readResult = await runTool({
+    tool: { tool_type: 'built_in' },
+    featureKey: 'imap.read_emails',
+    input: {},
+    credentialRecord: credential('app-password')
+  });
+
+  assert.equal(readResult.success, true);
+  assert.equal(readResult.mode, 'authenticated');
+  assert.ok(readResult.emails.length > 0);
+
+  const searchResult = await runTool({
+    tool: { tool_type: 'built_in' },
+    featureKey: 'imap.search_emails',
+    input: { query: 'invoice' },
+    credentialRecord: credential('app-password')
+  });
+
+  assert.equal(searchResult.success, true);
+  assert.equal(searchResult.mode, 'authenticated');
+  assert.equal(searchResult.emails[0].id, 'msg-imap-1');
+
+  const sendResult = await runTool({
+    tool: { tool_type: 'built_in' },
+    featureKey: 'imap.send_email',
+    input: { to: 'ops@example.com', subject: 'Status', body: 'All good' },
+    credentialRecord: credential('app-password')
+  });
+
+  assert.equal(sendResult.success, true);
+  assert.equal(sendResult.recipient, 'ops@example.com');
+  assert.equal(sendResult.mode, 'authenticated');
+});
+
+test('built-in connection config does not seed known unsupported feature keys', () => {
+  const routePath = path.join(__dirname, '..', 'app', 'api', 'tool-accounts', 'add', 'route.js');
+  const source = fs.readFileSync(routePath, 'utf8');
+
+  assert.doesNotMatch(source, /feature_key:\s*"slack\.send_dm"/);
+  assert.doesNotMatch(source, /feature_key:\s*"email\./);
+  assert.doesNotMatch(source, /feature_key:\s*"gmail_app\./);
 });

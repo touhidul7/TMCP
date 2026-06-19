@@ -20,7 +20,7 @@ export async function POST(request) {
         "X-Title": "TMCP Tassistant Gateway Verification"
       },
       body: JSON.stringify({
-        model: "google/gemini-flash-1.5",
+        model: "openai/gpt-oss-20b:free",
         messages: [
           { role: "user", content: "Ping" }
         ],

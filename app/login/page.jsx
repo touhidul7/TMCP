@@ -1,11 +1,43 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase/client";
 import { Network } from "lucide-react";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+
+    const redirectIfSignedIn = (session) => {
+      if (!active) return;
+      if (session) {
+        router.replace("/dashboard");
+      } else {
+        setCheckingSession(false);
+      }
+    };
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      redirectIfSignedIn(session);
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (session) router.replace("/dashboard");
+      }
+    );
+
+    return () => {
+      active = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, [router]);
 
   const handleOAuthLogin = async (provider) => {
     setError("");
@@ -24,6 +56,14 @@ export default function LoginPage() {
       setIsLoading(false);
     }
   };
+
+  if (checkingSession) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4 py-12 sm:px-6 lg:px-8 relative overflow-hidden">

@@ -4,15 +4,18 @@ const SYSTEM_PROMPT = `You are Tassistant, the integrated product copilot for th
 Your tone is concise, professional, direct, and action-oriented.
 
 ### CRITICAL RULES:
-1. **Never write external code** (Python, JS, Node.js) or tutorials on building custom backend services.
-2. **Focus strictly on the TMCP Dashboard UI**: Tell the user what buttons to click, what inputs to fill, and how TMCP handles things.
-3. **Be Concise**: Use bullet points and bold text. Keep replies SHORT. No conversational filler.
+1. **Use the supplied dashboard context first**. Treat it as the current workspace state.
+2. **Never reveal secrets**. Raw API keys, OAuth tokens, passwords, private keys, and encrypted credential payloads should never be requested or displayed.
+3. **Do not invent state**. If the context does not show a tool, account, permission, log, or key status, say what is missing and where the user should check.
+4. **Focus on TMCP**: dashboard navigation, connected accounts, agents, permissions, approvals, gateway API calls, logs, and documentation.
+5. **TMCP code examples are allowed** only for gateway requests such as cURL, JavaScript fetch, or Python requests against /api/gateway/*.
+6. **Be concise**: use bullets, name exact pages/buttons/fields, and keep replies practical.
 
 ---
 
 ### TMCP ARCHITECTURE & UI:
 - **Workspaces**: Switch in the Sidebar dropdown. Each has its own tools, agents, API keys, permissions, approvals, and logs.
-- **Built-in Tools**: Gmail, Google Drive, Google Sheets, Google Calendar, Hunter.io, Consulti, IMAP Email, Slack, GitHub.
+- **Built-in Tools**: Use the dashboard context for the current catalog. Common implemented runners include Gmail, Drive, Sheets, Hunter, Consulti, IMAP/SMTP, Slack, GitHub, SSH, Apify, Resend, Serper, and Scrape.do.
 - **Custom Tools**: Register any REST API (Custom REST) or MCP server (Custom MCP) via **Tools -> Register New Tool**.
 - **Connected Accounts**: Encrypted API key/OAuth tokens for a tool. Add via **Tools -> [Tool] -> Manage -> Connect Account**.
 - **Agent API Keys**: Generated in **API Keys** tab. Used as \`Authorization: Bearer mcp_live_...\` by agent scripts. Shown once in the banner.
@@ -31,9 +34,43 @@ Your tone is concise, professional, direct, and action-oriented.
 - **Register Custom REST Tool**: **Tools -> Register New Tool -> Custom REST** -> enter Base URL, select Auth method.
 - **Add Agent Permission**: **Agents -> [Agent] -> Manage -> check tool feature checkbox -> Save**.`;
 
+const MAX_CONTEXT_CHARS = 18000;
+const MAX_MESSAGES = 20;
+
+function safeJson(value) {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return "{}";
+  }
+}
+
+function buildContextMessage(context) {
+  if (!context || typeof context !== "object") {
+    return "No live dashboard context was supplied. Answer from static TMCP documentation only and ask the user to refresh the dashboard if live state is needed.";
+  }
+
+  const contextText = safeJson(context);
+  const clippedContext = contextText.length > MAX_CONTEXT_CHARS
+    ? `${contextText.slice(0, MAX_CONTEXT_CHARS)}\n...[context truncated for safety]`
+    : contextText;
+
+  return `Current sanitized TMCP dashboard context follows. Use it to diagnose the user's issue. Do not print the full JSON back to the user unless specifically asked for a short relevant excerpt.\n\n${clippedContext}`;
+}
+
+function sanitizeMessages(messages) {
+  return messages
+    .filter((message) => message && ["user", "assistant"].includes(message.role) && typeof message.content === "string")
+    .slice(-MAX_MESSAGES)
+    .map((message) => ({
+      role: message.role,
+      content: message.content.slice(0, 4000)
+    }));
+}
+
 export async function POST(request) {
   try {
-    const { openrouterKey, messages } = await request.json();
+    const { openrouterKey, messages, context } = await request.json();
 
     if (!openrouterKey || !openrouterKey.trim()) {
       return NextResponse.json(
@@ -49,10 +86,19 @@ export async function POST(request) {
       );
     }
 
+    const sanitizedMessages = sanitizeMessages(messages);
+    if (sanitizedMessages.length === 0) {
+      return NextResponse.json(
+        { success: false, error: "Messages payload did not contain any valid chat messages" },
+        { status: 400 }
+      );
+    }
+
     // Format messages for OpenRouter (relaying system prompt and chat history)
     const formattedMessages = [
       { role: "system", content: SYSTEM_PROMPT },
-      ...messages
+      { role: "system", content: buildContextMessage(context) },
+      ...sanitizedMessages
     ];
 
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -64,9 +110,10 @@ export async function POST(request) {
         "X-Title": "TMCP Tassistant Gateway Chat"
       },
       body: JSON.stringify({
-        model: "google/gemini-flash-1.5",
+        model: "openai/gpt-oss-20b:free",
         messages: formattedMessages,
-        max_tokens: 512
+        max_tokens: 900,
+        temperature: 0.2
       })
     });
 

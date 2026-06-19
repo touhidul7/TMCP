@@ -1,12 +1,19 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useMockStore } from "@/lib/mock-store";
 import { Search, AlertTriangle, Bell, Terminal, Bot, Puzzle } from "lucide-react";
 
 export default function DashboardHeader({ title }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, approvals, tools, agents, logs } = useMockStore();
+
+  const quickLinks = [
+    { label: "Global View", href: "/dashboard" },
+    { label: "Logs", href: "/dashboard/logs" },
+    { label: "Health", href: "/dashboard/settings" },
+  ];
 
   const [searchQuery, setSearchQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -45,14 +52,14 @@ export default function DashboardHeader({ title }) {
   const pendingApprovalsCount = approvals.filter(a => a.status === "pending").length;
 
   return (
-    <header className="h-16 border-b border-outline-variant bg-surface flex items-center justify-between px-6 sticky top-0 z-40">
-      <div className="flex items-center gap-6">
-        <h2 className="text-base font-bold text-on-surface w-52 truncate" title={title || "TMCP Platform"}>
+    <header className="border-b border-outline-variant bg-surface flex flex-col gap-3 px-4 py-3 sticky top-14 lg:top-0 z-40 xl:flex-row xl:items-center xl:justify-between lg:px-6">
+      <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:gap-6">
+        <h2 className="text-base font-bold text-on-surface truncate xl:w-52" title={title || "TMCP Platform"}>
           {title || "TMCP Platform"}
         </h2>
         
         {/* Search */}
-        <div ref={searchRef} className="relative hidden md:block">
+        <div ref={searchRef} className="relative w-full md:block xl:w-auto">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant w-4 h-4" />
           <input
             type="text"
@@ -62,14 +69,14 @@ export default function DashboardHeader({ title }) {
               setIsOpen(true);
             }}
             onFocus={() => setIsOpen(true)}
-            className="bg-surface-container-lowest border border-outline-variant rounded pl-10 pr-4 py-1.5 w-80 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all placeholder:text-outline/70 text-on-surface"
+            className="bg-surface-container-lowest border border-outline-variant rounded pl-10 pr-4 py-1.5 w-full md:w-80 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all placeholder:text-outline/70 text-on-surface"
             placeholder="Search tools, agents, or logs..."
           />
           {isOpen && searchQuery.trim() !== "" && (
-            <div className="absolute top-full left-0 mt-2 w-96 bg-surface-container-high border border-outline-variant rounded-lg shadow-2xl overflow-hidden z-50 max-h-[480px] overflow-y-auto backdrop-blur-md bg-opacity-95">
+            <div className="absolute top-full left-0 mt-2 w-full md:w-96 bg-surface-container-high border border-outline-variant rounded-lg shadow-2xl overflow-hidden z-50 max-h-[480px] overflow-y-auto backdrop-blur-md bg-opacity-95">
               {filteredTools.length === 0 && filteredAgents.length === 0 && filteredLogs.length === 0 ? (
                 <div className="p-6 text-center text-on-surface-variant text-sm">
-                  No results found for <span className="font-semibold text-on-surface">"{searchQuery}"</span>
+                  No results found for <span className="font-semibold text-on-surface">&quot;{searchQuery}&quot;</span>
                 </div>
               ) : (
                 <div className="py-2 text-xs space-y-2">
@@ -174,20 +181,30 @@ export default function DashboardHeader({ title }) {
         </div>
 
         {/* Quick links */}
-        <div className="flex gap-4">
-          <Link href="/dashboard" className="text-xs font-semibold text-primary border-b-2 border-primary pb-1">
-            Global View
-          </Link>
-          <Link href="/dashboard/logs" className="text-xs font-semibold text-on-surface-variant hover:text-on-surface transition-colors">
-            Logs
-          </Link>
-          <Link href="/dashboard/settings" className="text-xs font-semibold text-on-surface-variant hover:text-on-surface transition-colors">
-            Health
-          </Link>
+        <div className="hidden gap-4 sm:flex">
+          {quickLinks.map((link) => {
+            const isActive =
+              link.href === "/dashboard"
+                ? pathname === "/dashboard"
+                : pathname === link.href || pathname.startsWith(`${link.href}/`);
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={
+                  isActive
+                    ? "text-xs font-semibold text-primary border-b-2 border-primary pb-1"
+                    : "text-xs font-semibold text-on-surface-variant hover:text-on-surface transition-colors"
+                }
+              >
+                {link.label}
+              </Link>
+            );
+          })}
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-2 xl:gap-4">
         {/* Approvals Quick Access */}
         {pendingApprovalsCount > 0 && (
           <button
@@ -201,13 +218,13 @@ export default function DashboardHeader({ title }) {
 
         <button
           onClick={() => router.push("/dashboard/tools/add")}
-          className="flex items-center gap-1.5 px-4 py-1.5 bg-secondary-container text-on-secondary-container rounded text-xs font-semibold hover:bg-surface-container-highest transition-colors active:scale-95 duration-100 cursor-pointer"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary-container text-on-secondary-container rounded text-xs font-semibold hover:bg-surface-container-highest transition-colors active:scale-95 duration-100 cursor-pointer"
         >
           Add Custom Tool
         </button>
 
         {/* Notifications and status icons */}
-        <div className="flex gap-1 border-l border-outline-variant pl-4 ml-1">
+        <div className="flex gap-1 border-l border-outline-variant pl-2 ml-1">
           <button
             onClick={() => router.push("/dashboard/approvals")}
             className="p-2 text-on-surface-variant hover:text-primary transition-colors hover:bg-surface-container rounded-full relative cursor-pointer"

@@ -1,13 +1,35 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { Bot, X, Send, CornerDownLeft, Sparkles, MessageSquare, AlertCircle, Key, Trash2 } from "lucide-react";
+import { useMockStore } from "@/lib/mock-store";
+import { GATEWAY_ENDPOINTS, getExampleInput, getGatewaySchemas } from "@/lib/docs/gateway-docs";
 
 export default function Tassistant() {
   const router = useRouter();
+  const pathname = usePathname();
+  const {
+    useLiveDb,
+    user,
+    workspaces,
+    currentWorkspace,
+    users,
+    tools,
+    features,
+    toolAccounts,
+    agents,
+    apiKeys,
+    permissions,
+    logs,
+    approvals,
+    getWorkspaceStats
+  } = useMockStore();
   const [isOpen, setIsOpen] = useState(false);
-  const [openrouterKey, setOpenrouterKey] = useState("");
+  const [openrouterKey, setOpenrouterKey] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return localStorage.getItem("tmcp_openrouter_key") || "";
+  });
   const [messages, setMessages] = useState([
     {
       role: "assistant",
@@ -19,20 +41,50 @@ export default function Tassistant() {
   const [error, setError] = useState("");
 
   const messagesEndRef = useRef(null);
-
-  // Load OpenRouter key from localStorage and listen to updates
-  const loadKey = () => {
-    const key = localStorage.getItem("tmcp_openrouter_key") || "";
-    setOpenrouterKey(key);
-  };
+  const assistantContext = useMemo(() => {
+    return buildAssistantContext({
+      pathname,
+      useLiveDb,
+      user,
+      workspaces,
+      currentWorkspace,
+      users,
+      tools,
+      features,
+      toolAccounts,
+      agents,
+      apiKeys,
+      permissions,
+      logs,
+      approvals,
+      getWorkspaceStats
+    });
+  }, [
+    pathname,
+    useLiveDb,
+    user,
+    workspaces,
+    currentWorkspace,
+    users,
+    tools,
+    features,
+    toolAccounts,
+    agents,
+    apiKeys,
+    permissions,
+    logs,
+    approvals,
+    getWorkspaceStats
+  ]);
 
   useEffect(() => {
-    loadKey();
+    const handleKeyChanged = () => {
+      setOpenrouterKey(localStorage.getItem("tmcp_openrouter_key") || "");
+    };
 
-    // Listen for changes from the settings page
-    window.addEventListener("tmcp_openrouter_key_changed", loadKey);
+    window.addEventListener("tmcp_openrouter_key_changed", handleKeyChanged);
     return () => {
-      window.removeEventListener("tmcp_openrouter_key_changed", loadKey);
+      window.removeEventListener("tmcp_openrouter_key_changed", handleKeyChanged);
     };
   }, []);
 
@@ -65,7 +117,8 @@ export default function Tassistant() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           openrouterKey,
-          messages: newMessages.map(m => ({ role: m.role, content: m.content }))
+          messages: newMessages.map(m => ({ role: m.role, content: m.content })),
+          context: assistantContext
         })
       });
 
@@ -207,7 +260,7 @@ export default function Tassistant() {
 
       {/* Chat Window Panel */}
       {isOpen && (
-        <div className="fixed bottom-20 right-6 z-50 w-[380px] h-[520px] max-h-[calc(100vh-100px)] rounded-xl border border-outline-variant bg-surface-container/90 backdrop-blur-md shadow-2xl flex flex-col overflow-hidden animate-slide-up transition-all">
+        <div className="fixed bottom-20 left-4 right-4 z-50 h-[calc(100vh-100px)] max-h-[520px] rounded-xl border border-outline-variant bg-surface-container/90 backdrop-blur-md shadow-2xl flex flex-col overflow-hidden animate-slide-up transition-all sm:left-auto sm:right-6 sm:w-[380px] sm:h-[520px] sm:max-h-[calc(100vh-100px)]">
           
           {/* Header */}
           <div className="px-4 py-3 bg-surface-container-high border-b border-outline-variant flex items-center justify-between">
@@ -365,4 +418,210 @@ export default function Tassistant() {
       )}
     </>
   );
+}
+
+function buildAssistantContext({
+  pathname,
+  useLiveDb,
+  user,
+  workspaces,
+  currentWorkspace,
+  users,
+  tools,
+  features,
+  toolAccounts,
+  agents,
+  apiKeys,
+  permissions,
+  logs,
+  approvals,
+  getWorkspaceStats
+}) {
+  const toolById = new Map(tools.map((tool) => [tool.id, tool]));
+  const agentById = new Map(agents.map((agent) => [agent.id, agent]));
+  const accountById = new Map(toolAccounts.map((account) => [account.id, account]));
+  const workspace = workspaces.find((item) => item.id === currentWorkspace);
+  const stats = typeof getWorkspaceStats === "function" ? getWorkspaceStats() : {};
+
+  const toolFeatureMap = features.reduce((acc, feature) => {
+    if (!acc[feature.tool_id]) acc[feature.tool_id] = [];
+    acc[feature.tool_id].push({
+      key: feature.feature_key,
+      name: feature.name,
+      description: feature.description,
+      dangerous: Boolean(feature.is_dangerous),
+      default_requires_approval: Boolean(feature.requires_approval),
+      example_input: getExampleInput(feature.feature_key)
+    });
+    return acc;
+  }, {});
+
+  const connectedAccounts = toolAccounts.map((account) => {
+    const tool = toolById.get(account.tool_id);
+    return {
+      id: account.id,
+      label: account.label,
+      status: account.status,
+      auth_type: account.auth_type,
+      account_email: account.account_email || null,
+      tool: tool ? {
+        id: tool.id,
+        name: tool.name,
+        slug: tool.slug,
+        provider: tool.provider,
+        enabled: tool.is_enabled !== false
+      } : null,
+      created_at: account.created_at || null
+    };
+  });
+
+  const agentSummaries = agents.map((agent) => {
+    const agentPermissions = permissions.filter((permission) => permission.agent_id === agent.id && permission.allowed);
+    const agentKeys = apiKeys.filter((key) => key.agent_id === agent.id);
+    return {
+      id: agent.id,
+      name: agent.name,
+      status: agent.status,
+      description: agent.description,
+      active_api_keys: agentKeys.filter((key) => key.status === "active").length,
+      revoked_api_keys: agentKeys.filter((key) => key.status !== "active").length,
+      api_key_prefixes: agentKeys.map((key) => ({
+        name: key.name,
+        prefix: key.key_prefix,
+        status: key.status,
+        last_used_at: key.last_used_at || null,
+        expires_at: key.expires_at || null
+      })),
+      allowed_feature_count: agentPermissions.length,
+      approval_required_count: agentPermissions.filter((permission) => permission.requires_approval).length
+    };
+  });
+
+  const allowedPermissions = permissions
+    .filter((permission) => permission.allowed)
+    .slice(0, 100)
+    .map((permission) => {
+      const agent = agentById.get(permission.agent_id);
+      const account = accountById.get(permission.tool_account_id);
+      const tool = account ? toolById.get(account.tool_id) : null;
+      return {
+        agent: agent?.name || permission.agent_id,
+        tool: tool?.name || "Unknown tool",
+        tool_slug: tool?.slug || null,
+        account_label: account?.label || permission.tool_account_id,
+        feature_key: permission.feature_key,
+        requires_approval: Boolean(permission.requires_approval),
+        daily_limit: permission.daily_limit || null
+      };
+    });
+
+  const toolSummaries = tools.map((tool) => {
+    const accounts = toolAccounts.filter((account) => account.tool_id === tool.id);
+    return {
+      id: tool.id,
+      name: tool.name,
+      slug: tool.slug,
+      provider: tool.provider,
+      category: tool.category,
+      type: tool.tool_type,
+      enabled: tool.is_enabled !== false,
+      public: Boolean(tool.is_public),
+      dangerous: Boolean(tool.is_dangerous),
+      connected_account_count: accounts.length,
+      connected_account_labels: accounts.map((account) => account.label),
+      feature_count: (toolFeatureMap[tool.id] || []).length,
+      features: (toolFeatureMap[tool.id] || []).slice(0, 12)
+    };
+  });
+
+  const recentLogs = logs.slice(0, 20).map((log) => ({
+    id: log.id,
+    timestamp: log.timestamp || log.created_at || null,
+    agent: log.agent_name || agentById.get(log.agent_id)?.name || log.agent_id || null,
+    tool: log.tool_name || null,
+    feature_key: log.feature_key,
+    status: log.status,
+    error: log.error || null,
+    latency_ms: log.latency_ms || null
+  }));
+
+  const pendingApprovals = approvals
+    .filter((approval) => approval.status === "pending")
+    .slice(0, 20)
+    .map((approval) => ({
+      id: approval.id,
+      agent: approval.agent_name || agentById.get(approval.agent_id)?.name || approval.agent_id || null,
+      tool: approval.tool_name || null,
+      feature_key: approval.feature_key,
+      status: approval.status,
+      created_at: approval.created_at || null
+    }));
+
+  return {
+    generated_at: new Date().toISOString(),
+    sanitized: true,
+    secret_policy: "No raw API keys, OAuth tokens, passwords, private keys, or encrypted credential payloads are included.",
+    current_page: {
+      path: pathname,
+      purpose: describePage(pathname)
+    },
+    app: {
+      name: "TMCP Tool Gateway",
+      mode: useLiveDb ? "Supabase live database" : "local browser storage",
+      public_docs_path: "/docs",
+      gateway_base_path: "/api/gateway"
+    },
+    workspace: {
+      id: currentWorkspace,
+      name: workspace?.name || "Unknown workspace",
+      current_user: user ? {
+        id: user.id,
+        name: user.name || user.email || user.id,
+        email: user.email || null,
+        role: user.role || null
+      } : null,
+      user_count: users.length,
+      stats
+    },
+    gateway_docs: {
+      endpoints: GATEWAY_ENDPOINTS,
+      schemas: getGatewaySchemas(),
+      auth_header: "Authorization: Bearer <mcp_live_api_key>",
+      execute_request_shape: {
+        tool: "Tool slug, such as gmail, github, ssh, serper, or scrapedo.",
+        action: "Feature key, such as gmail.search or slack.post_message.",
+        input: "Feature-specific JSON input.",
+        account_id: "Optional connected account id when more than one account exists for a tool."
+      }
+    },
+    tools: toolSummaries,
+    connected_accounts: connectedAccounts,
+    agents: agentSummaries,
+    allowed_permissions: allowedPermissions,
+    recent_logs: recentLogs,
+    pending_approvals: pendingApprovals,
+    troubleshooting_hints: [
+      "401 usually means missing, revoked, expired, or copied-only-prefix API key.",
+      "403 or DENIED usually means the agent lacks a checked permission for the requested account and feature key.",
+      "Pending approval means the permission requires admin approval before execution.",
+      "500 gateway errors usually require checking connected account status, auth type, provider credentials, and runner support."
+    ]
+  };
+}
+
+function describePage(pathname = "") {
+  if (pathname === "/dashboard") return "Workspace overview with health, metrics, recent calls, and connected tool coverage.";
+  if (pathname.includes("/dashboard/tools/add")) return "Register a custom REST or MCP tool.";
+  if (pathname.includes("/dashboard/tools/")) return "Tool detail page for connection setup, feature docs, permissions, and code snippets.";
+  if (pathname.includes("/dashboard/tools")) return "Tools registry and search.";
+  if (pathname.includes("/dashboard/agents/")) return "Agent detail and permission matrix.";
+  if (pathname.includes("/dashboard/agents")) return "Agent list and creation page.";
+  if (pathname.includes("/dashboard/api-keys")) return "Agent API key creation, rotation, revocation, and docs entry point.";
+  if (pathname.includes("/dashboard/logs")) return "Gateway execution audit logs.";
+  if (pathname.includes("/dashboard/approvals")) return "Manual approval queue for gated tool calls.";
+  if (pathname.includes("/dashboard/connections")) return "Connected tool accounts overview.";
+  if (pathname.includes("/dashboard/users")) return "Workspace user management.";
+  if (pathname.includes("/dashboard/roles")) return "Workspace roles and permissions overview.";
+  if (pathname.includes("/dashboard/settings")) return "Workspace settings, encryption key controls, and Tassistant OpenRouter setup.";
+  return "Dashboard area.";
 }

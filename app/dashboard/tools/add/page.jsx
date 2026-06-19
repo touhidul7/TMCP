@@ -151,7 +151,7 @@ export default function AddToolPage() {
     <>
       <DashboardHeader title="Register New Tool" />
 
-      <main className="p-6 space-y-6 flex-1 overflow-y-auto max-w-4xl">
+      <main className="p-4 sm:p-6 space-y-6 flex-1 overflow-y-auto max-w-4xl">
         <div className="flex items-center gap-2">
           <button 
             onClick={() => router.push("/dashboard/tools")}

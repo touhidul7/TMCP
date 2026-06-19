@@ -37,7 +37,7 @@ export default function ToolsPage() {
     <>
       <DashboardHeader title="Tools Registry" />
 
-      <main className="p-6 space-y-6 flex-1 overflow-y-auto">
+      <main className="p-4 sm:p-6 space-y-6 flex-1 overflow-y-auto">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-xl font-bold text-on-surface">Platform Tools</h1>

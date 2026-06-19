@@ -68,7 +68,7 @@ export default function AgentDetailPage({ params }) {
     <>
       <DashboardHeader title={`Agent Profile: ${agent.name}`} />
 
-      <main className="p-6 space-y-6 flex-1 overflow-y-auto max-w-6xl">
+      <main className="p-4 sm:p-6 space-y-6 flex-1 overflow-y-auto max-w-6xl">
         {/* Navigation Breadcrumb */}
         <div className="flex items-center gap-2">
           <button 

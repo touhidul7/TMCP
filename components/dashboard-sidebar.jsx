@@ -15,10 +15,10 @@ import {
   History,
   FileCheck,
   Settings,
-  Cpu,
   Plus,
   FileText,
-  LogOut
+  LogOut,
+  BookOpen
 } from "lucide-react";
 import Image from "next/image";
 
@@ -33,9 +33,10 @@ const iconMap = {
   history_2: History,
   fact_check: FileCheck,
   settings: Settings,
+  docs: BookOpen,
 };
 
-export default function DashboardSidebar() {
+export default function DashboardSidebar({ mobile = false, onNavigate }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, workspaces, currentWorkspace, switchWorkspace, handleLogout, hasPermission } = useMockStore();
@@ -51,10 +52,11 @@ export default function DashboardSidebar() {
     { name: "Logs", path: "/dashboard/logs", icon: "history_2", perm: "logs.view" },
     { name: "Approvals", path: "/dashboard/approvals", icon: "fact_check", perm: "approvals.view" },
     { name: "Settings", path: "/dashboard/settings", icon: "settings", perm: "settings.view" },
+    { name: "Documentation", path: "/docs", icon: "docs", perm: "api_keys.view" },
   ];
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-[280px] border-r border-outline-variant bg-surface-container-low flex flex-col py-4 z-50">
+    <aside className={`${mobile ? "relative h-full w-full" : "fixed left-0 top-0 hidden h-screen w-[280px] lg:flex"} border-r border-outline-variant bg-surface-container-low flex-col py-4 z-50`}>
       {/* Brand Logo & Workspace Switcher */}
       <div className="px-6 mb-8 space-y-4">
         <div>
@@ -104,6 +106,7 @@ export default function DashboardSidebar() {
             <Link
               key={item.path}
               href={item.path}
+              onClick={onNavigate}
               className={`flex items-center gap-3 px-4 py-3 rounded transition-all duration-150 ${
                 isActive
                   ? "text-primary bg-secondary-container/10 border-l-4 border-primary font-medium scale-[0.99]"

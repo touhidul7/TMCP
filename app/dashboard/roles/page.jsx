@@ -54,7 +54,7 @@ export default function RolesPage() {
       <>
         <DashboardHeader title="Workspace Roles Configuration" />
 
-      <main className="p-6 space-y-6 flex-1 overflow-y-auto max-w-6xl">
+      <main className="p-4 sm:p-6 space-y-6 flex-1 overflow-y-auto max-w-6xl">
         <div>
           <h1 className="text-xl font-bold text-on-surface">Access Role Matrix</h1>
           <p className="text-xs text-on-surface-variant mt-1">

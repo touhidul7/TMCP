@@ -106,13 +106,13 @@ const featureMap = {
     { feature_key: "consulti.enrich_company", name: "Enrich Company", description: "Fetch details and size of a company", is_dangerous: false, requires_approval: false }
   ],
   "custom-email": [
-    { feature_key: "email.read_emails", name: "Read Emails", description: "Fetch email summaries via IMAP or POP3", is_dangerous: false, requires_approval: false },
-    { feature_key: "email.search_emails", name: "Search Emails", description: "Search emails by criteria via IMAP", is_dangerous: false, requires_approval: false },
-    { feature_key: "email.send_email", name: "Send Email (SMTP)", description: "Send an email using SMTP", is_dangerous: true, requires_approval: true }
+    { feature_key: "imap.read_emails", name: "Read Emails", description: "Fetch email summaries via IMAP or POP3", is_dangerous: false, requires_approval: false },
+    { feature_key: "imap.search_emails", name: "Search Emails", description: "Search emails by criteria via IMAP", is_dangerous: false, requires_approval: false },
+    { feature_key: "imap.send_email", name: "Send Email (SMTP)", description: "Send an email using SMTP", is_dangerous: true, requires_approval: true }
   ],
   slack: [
     { feature_key: "slack.post_message", name: "Post Message", description: "Post to a channel", is_dangerous: true, requires_approval: false },
-    { feature_key: "slack.send_dm", name: "Send Direct Message", description: "Send private message", is_dangerous: true, requires_approval: true }
+    { feature_key: "slack.list_channels", name: "List Channels", description: "List available Slack channels", is_dangerous: false, requires_approval: false }
   ],
   github: [
     { feature_key: "github.list_issues", name: "List Issues", description: "List issues in repo", is_dangerous: false, requires_approval: false },
@@ -138,7 +138,9 @@ const featureMap = {
     { feature_key: "twilio.send_sms", name: "Send SMS", description: "Send an SMS via Twilio", is_dangerous: true, requires_approval: true }
   ],
   ssh: [
-    { feature_key: "ssh.exec_command", name: "Execute Command", description: "Run commands over SSH", is_dangerous: true, requires_approval: true }
+    { feature_key: "ssh.exec_command", name: "Execute Command", description: "Run commands over SSH", is_dangerous: true, requires_approval: true },
+    { feature_key: "ssh.list_directory", name: "List Directory", description: "List files in a remote directory", is_dangerous: false, requires_approval: false },
+    { feature_key: "ssh.upload_file", name: "Upload File", description: "Upload text content to a remote path", is_dangerous: true, requires_approval: false }
   ],
   ftp: [
     { feature_key: "ftp.upload_file", name: "Upload File", description: "Upload to FTP server", is_dangerous: true, requires_approval: false }
@@ -169,7 +171,9 @@ const featureMap = {
     { feature_key: "ghl.list_contacts", name: "List Contacts", description: "Fetch GHL contacts", is_dangerous: false, requires_approval: false }
   ],
   "gmail-app": [
-    { feature_key: "gmail_app.send_email", name: "Send Email", description: "Send SMTP mail using App Password", is_dangerous: true, requires_approval: true }
+    { feature_key: "imap.read_emails", name: "Read Emails (IMAP)", description: "Fetch emails via IMAP using an app password", is_dangerous: false, requires_approval: false },
+    { feature_key: "imap.search_emails", name: "Search Emails (IMAP)", description: "Search mailbox messages via IMAP", is_dangerous: false, requires_approval: false },
+    { feature_key: "imap.send_email", name: "Send Email (SMTP)", description: "Send SMTP mail using an app password", is_dangerous: true, requires_approval: true }
   ],
   postgresql: [
     { feature_key: "postgresql.query", name: "Query Database", description: "Run SELECT query", is_dangerous: false, requires_approval: false },
@@ -230,9 +234,29 @@ const featureMap = {
   ]
 };
 
+const EXECUTABLE_BUILT_IN_SLUGS = new Set([
+  "gmail",
+  "drive",
+  "sheets",
+  "hunter",
+  "consulti",
+  "custom-email",
+  "slack",
+  "github",
+  "ssh",
+  "apify",
+  "resend",
+  "gmail-app",
+  "serper",
+  "scrapedo"
+]);
+
 async function getOrCreateBuiltinTool(workspaceId, slug) {
   const meta = TOOL_META[slug];
   if (!meta) return null;
+  if (!EXECUTABLE_BUILT_IN_SLUGS.has(slug)) {
+    throw new Error(`Built-in tool '${slug}' is listed in the catalog but is not executable by the gateway yet.`);
+  }
 
   let { data: tool } = await supabaseAdmin
     .from("tools")
@@ -263,7 +287,7 @@ async function getOrCreateBuiltinTool(workspaceId, slug) {
     tool = newTool;
 
     // Seed default features per tool
-    const features = (featureMap[slug] || []).map(f => ({ ...f, tool_id: tool.id }));
+    const features = featureMap[slug].map(f => ({ ...f, tool_id: tool.id }));
     if (features.length > 0) {
       await supabaseAdmin.from("tool_features").insert(features);
     }
@@ -301,6 +325,9 @@ export async function POST(request) {
 
     if (toolError || !tool) {
       throw new Error("Associated tool not found");
+    }
+    if (tool.tool_type === "built_in" && !EXECUTABLE_BUILT_IN_SLUGS.has(tool.slug)) {
+      throw new Error(`Built-in tool '${tool.slug}' is listed in the catalog but is not executable by the gateway yet.`);
     }
 
     const authType = (parsed.credentials.apiKey || parsed.credentials.key) ? "api_key" 

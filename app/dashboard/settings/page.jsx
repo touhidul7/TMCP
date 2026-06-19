@@ -1,46 +1,35 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useMockStore } from "@/lib/mock-store";
 import DashboardHeader from "@/components/dashboard-header";
 import { KeyRound, RefreshCw, Eye, EyeOff, Check, Loader2, Bot } from "lucide-react";
 
 export default function SettingsPage() {
   const { user, workspaces, currentWorkspace, hasPermission } = useMockStore();
-  const [workspaceName, setWorkspaceName] = useState("TMCP Default Workspace");
-  const [encryptionKey, setEncryptionKey] = useState("");
+  const activeWorkspaceName = workspaces.find(w => w.id === currentWorkspace)?.name || "TMCP Default Workspace";
+  const [workspaceNameDraft, setWorkspaceNameDraft] = useState(null);
+  const workspaceName = workspaceNameDraft ?? activeWorkspaceName;
+  const [encryptionKey, setEncryptionKey] = useState(() => {
+    if (typeof window === "undefined") return "";
+    const savedKey = localStorage.getItem("tmcp_encryption_key");
+    if (savedKey) return savedKey;
+    const newKey = "4c9e8d35f8c6b2da71e09dfa5342a1bc8f9024ea10c3b8da76c24be812d4fae0";
+    localStorage.setItem("tmcp_encryption_key", newKey);
+    return newKey;
+  });
   const [rotated, setRotated] = useState(false);
 
   // OpenRouter key for Tassistant Chatbot
-  const [openrouterKey, setOpenrouterKey] = useState("");
+  const [openrouterKey, setOpenrouterKey] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return localStorage.getItem("tmcp_openrouter_key") || "";
+  });
   const [showKey, setShowKey] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [verifySuccess, setVerifySuccess] = useState(false);
   const [verifyError, setVerifyError] = useState("");
   const [saveStatus, setSaveStatus] = useState("");
-
-  useEffect(() => {
-    const activeWs = workspaces.find(w => w.id === currentWorkspace);
-    if (activeWs) {
-      setWorkspaceName(activeWs.name);
-    }
-
-    // Default mock encryption key if not generated
-    const savedKey = localStorage.getItem("tmcp_encryption_key");
-    if (savedKey) {
-      setEncryptionKey(savedKey);
-    } else {
-      const newKey = "4c9e8d35f8c6b2da71e09dfa5342a1bc8f9024ea10c3b8da76c24be812d4fae0";
-      setEncryptionKey(newKey);
-      localStorage.setItem("tmcp_encryption_key", newKey);
-    }
-
-    // Load OpenRouter key
-    const savedORKey = localStorage.getItem("tmcp_openrouter_key");
-    if (savedORKey) {
-      setOpenrouterKey(savedORKey);
-    }
-  }, [workspaces, currentWorkspace]);
 
   const handleSaveOpenRouterKey = (e) => {
     e.preventDefault();
@@ -92,7 +81,7 @@ export default function SettingsPage() {
   };
 
   const handleResetWorkspace = () => {
-    if (confirm("CRITICAL WARNING: This will delete all mock agents, custom tools, API keys, and logs from local storage, returning the workspace to its default seed data. Proceed?")) {
+    if (confirm("CRITICAL WARNING: This will delete all local agents, custom tools, API keys, and logs from local storage, returning the workspace to its default seed data. Proceed?")) {
       localStorage.removeItem("tmcp_store");
       localStorage.removeItem("tmcp_encryption_key");
       localStorage.removeItem("tmcp_openrouter_key");
@@ -105,7 +94,7 @@ export default function SettingsPage() {
     <>
       <DashboardHeader title="Workspace Configuration" />
 
-      <main className="p-6 space-y-6 flex-1 overflow-y-auto max-w-4xl">
+      <main className="p-4 sm:p-6 space-y-6 flex-1 overflow-y-auto max-w-4xl">
         <div>
           <h1 className="text-xl font-bold text-on-surface">Global Settings</h1>
           <p className="text-xs text-on-surface-variant mt-1">
@@ -124,7 +113,7 @@ export default function SettingsPage() {
                 type="text"
                 disabled={!hasPermission("settings.edit")}
                 value={workspaceName}
-                onChange={(e) => setWorkspaceName(e.target.value)}
+                onChange={(e) => setWorkspaceNameDraft(e.target.value)}
                 className="w-full bg-surface-container-lowest border border-outline-variant rounded px-3 py-2 text-xs text-on-surface focus:border-primary outline-none disabled:opacity-50"
               />
             </div>
@@ -233,13 +222,13 @@ export default function SettingsPage() {
 
             {verifySuccess && (
               <p className="text-[10px] font-mono text-green-400 font-semibold">
-                ✓ Connection successful! Tassistant is fully ready to assist you.
+                Success: Connection successful. Tassistant is ready to assist you.
               </p>
             )}
 
             {verifyError && (
               <p className="text-[10px] font-mono text-error font-semibold">
-                ✗ Connection failed: {verifyError}
+                Failed: {verifyError}
               </p>
             )}
           </form>
@@ -254,7 +243,7 @@ export default function SettingsPage() {
 
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-1">
-              <h4 className="text-xs font-bold text-on-surface">Reset Mock Database Storage</h4>
+              <h4 className="text-xs font-bold text-on-surface">Reset Local Workspace Storage</h4>
               <p className="text-xs text-on-surface-variant max-w-lg">
                 Clears all created agents, custom tools, permission matrices, API keys, and logs from local storage, returning the app back to its default state.
               </p>
