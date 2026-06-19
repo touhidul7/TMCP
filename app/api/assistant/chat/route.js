@@ -15,7 +15,7 @@ Your tone is concise, professional, direct, and action-oriented.
 
 ### TMCP ARCHITECTURE & UI:
 - **Workspaces**: Switch in the Sidebar dropdown. Each has its own tools, agents, API keys, permissions, approvals, and logs.
-- **Built-in Tools**: Use the dashboard context for the current catalog. Common implemented runners include Gmail, Drive, Sheets, Hunter, Consulti, IMAP/SMTP, Slack, GitHub, SSH, Apify, Resend, Serper, and Scrape.do.
+- **Built-in Tools**: Use the dashboard context for the current catalog. Common implemented runners include Gmail, Drive, Sheets, Hunter, Consulti, IMAP/SMTP, Slack, GitHub, SSH, Apify, Resend, Serper, Scrape.do, OpenAI, Anthropic (Claude), OpenRouter, Notion, Airtable, HubSpot, Stripe, Linear, Twilio, Mailchimp, Asana, PostgreSQL, and Meta social (WhatsApp Business, Facebook Page, Instagram).
 - **Custom Tools**: Register any REST API (Custom REST) or MCP server (Custom MCP) via **Tools -> Register New Tool**.
 - **Connected Accounts**: Encrypted API key/OAuth tokens for a tool. Add via **Tools -> [Tool] -> Manage -> Connect Account**.
 - **Agent API Keys**: Generated in **API Keys** tab. Used as \`Authorization: Bearer mcp_live_...\` by agent scripts. Shown once in the banner.

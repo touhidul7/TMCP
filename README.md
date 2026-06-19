@@ -17,7 +17,7 @@ TMCP is a Next.js 16 dashboard and API gateway for connecting third-party tools 
   - `/dashboard/docs` redirects to `/docs` for compatibility.
   - Tool detail pages show per-feature cURL, JavaScript, and Python snippets using the current tool slug and connected account id.
   - API Keys links users to the full documentation page and exposes the agent docs endpoint.
-- Implemented built-in router modules currently include Gmail, Google Drive, Google Sheets, Hunter, Consulti, IMAP/SMTP email, Slack, GitHub, SSH, Apify, Resend, Serper, and Scrape.do.
+- Implemented built-in router modules currently include Gmail, Google Drive, Google Sheets, Hunter, Consulti, IMAP/SMTP email, Slack, GitHub, SSH, Apify, Resend, Serper, Scrape.do, OpenAI, Anthropic (Claude), OpenRouter, Notion, Airtable, HubSpot, Stripe, Linear, Twilio, Mailchimp, Asana, PostgreSQL, and Meta social automation (WhatsApp Business, Facebook Page, Instagram).
 - Some catalog tools are visible for future integration, but account creation is guarded so unsupported built-ins cannot create misleading connected accounts.
 
 ## Development

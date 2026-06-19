@@ -255,7 +255,7 @@ export default function Home() {
         <section className="border-b border-outline-variant bg-surface-container-lowest">
           <div className="mx-auto grid max-w-7xl gap-8 px-5 py-14 md:grid-cols-3 lg:px-8">
             <Stat value="4" label="Gateway endpoints" />
-            <Stat value="40+" label="Built-in tool integrations" />
+            <Stat value="43+" label="Built-in tool integrations" />
             <Stat value="3" label="Snippet languages per tool" />
           </div>
         </section>

@@ -74,7 +74,7 @@ export default function DashboardHeader({ title }) {
             placeholder="Search tools, agents, or logs..."
           />
           {isOpen && searchQuery.trim() !== "" && (
-            <div className="absolute top-full left-0 mt-2 w-full md:w-96 bg-surface-container-high border border-outline-variant rounded-lg shadow-2xl overflow-hidden z-50 max-h-[480px] overflow-y-auto backdrop-blur-md bg-opacity-95">
+            <div className="absolute top-full left-0 mt-2 w-full md:w-96 bg-surface-container-high border border-outline-variant rounded-lg shadow-2xl overflow-hidden z-50 max-h-120 overflow-y-auto backdrop-blur-md bg-opacity-95">
               {filteredTools.length === 0 && filteredAgents.length === 0 && filteredLogs.length === 0 ? (
                 <div className="p-6 text-center text-on-surface-variant text-sm">
                   No results found for <span className="font-semibold text-on-surface">&quot;{searchQuery}&quot;</span>

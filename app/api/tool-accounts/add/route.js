@@ -72,7 +72,12 @@ const TOOL_META = {
   activecampaign: { name: "ActiveCampaign", provider: "ActiveCampaign", category: "Marketing",  desc: "Sync marketing contact lists and automation tags.",     url: "https://activecampaign.com" },
   serper:       { name: "Serper Search",   provider: "Serper",       category: "Enrichment",     desc: "Google Search API by Serper.",                          url: "https://serper.dev" },
   scrapedo:     { name: "Scrape.do",       provider: "Scrape.do",    category: "Enrichment",     desc: "Rotating proxy API by Scrape.do.",                      url: "https://scrape.do" },
-  bigquery:     { name: "Google BigQuery", provider: "Google Cloud", category: "Storage",        desc: "Query, analyze, and manage Google BigQuery datasets.",   url: "https://cloud.google.com/bigquery" }
+  bigquery:     { name: "Google BigQuery", provider: "Google Cloud", category: "Storage",        desc: "Query, analyze, and manage Google BigQuery datasets.",   url: "https://cloud.google.com/bigquery" },
+
+  // Meta social automation
+  whatsapp:     { name: "WhatsApp Business", provider: "Meta",       category: "Communication",  desc: "Send WhatsApp messages and templates via the Meta Cloud API.", url: "https://business.whatsapp.com" },
+  facebook:     { name: "Facebook Page",   provider: "Meta",         category: "Marketing",      desc: "Publish posts, read posts, and pull insights for a Facebook Page.", url: "https://facebook.com" },
+  instagram:    { name: "Instagram",       provider: "Meta",         category: "Marketing",      desc: "Publish media and read recent posts from an Instagram business account.", url: "https://instagram.com" }
 };
 
 const featureMap = {
@@ -120,13 +125,17 @@ const featureMap = {
     { feature_key: "github.create_repository", name: "Create Repository", description: "Create a new repository under the authenticated account or organization", is_dangerous: true, requires_approval: true }
   ],
   openrouter: [
-    { feature_key: "openrouter.chat", name: "Chat Completions", description: "Query OpenRouter LLMs", is_dangerous: false, requires_approval: false }
+    { feature_key: "openrouter.chat", name: "Chat Completions", description: "Query any LLM via the OpenRouter OpenAI-compatible endpoint", is_dangerous: false, requires_approval: false },
+    { feature_key: "openrouter.list_models", name: "List Models", description: "Retrieve available models and their pricing", is_dangerous: false, requires_approval: false }
   ],
   anthropic: [
-    { feature_key: "anthropic.chat", name: "Messages API", description: "Query Claude models", is_dangerous: false, requires_approval: false }
+    { feature_key: "anthropic.chat", name: "Messages API", description: "Query Claude models via the Anthropic Messages API", is_dangerous: false, requires_approval: false },
+    { feature_key: "anthropic.vision", name: "Vision (Multimodal)", description: "Send an image alongside text to Claude vision models", is_dangerous: false, requires_approval: false }
   ],
   openai: [
-    { feature_key: "openai.chat", name: "Chat Completions", description: "Query GPT models", is_dangerous: false, requires_approval: false }
+    { feature_key: "openai.chat", name: "Chat Completions", description: "Query GPT models via /chat/completions", is_dangerous: false, requires_approval: false },
+    { feature_key: "openai.embeddings", name: "Embeddings", description: "Generate text embeddings", is_dangerous: false, requires_approval: false },
+    { feature_key: "openai.image_gen", name: "Image Generation", description: "Generate images with DALL-E", is_dangerous: false, requires_approval: false }
   ],
   resend: [
     { feature_key: "resend.send_email", name: "Send Email", description: "Send email via Resend API", is_dangerous: true, requires_approval: true }
@@ -135,7 +144,9 @@ const featureMap = {
     { feature_key: "instantly.list_campaigns", name: "List Campaigns", description: "List outreach campaigns", is_dangerous: false, requires_approval: false }
   ],
   twilio: [
-    { feature_key: "twilio.send_sms", name: "Send SMS", description: "Send an SMS via Twilio", is_dangerous: true, requires_approval: true }
+    { feature_key: "twilio.send_sms", name: "Send SMS", description: "Send an SMS via Twilio", is_dangerous: true, requires_approval: true },
+    { feature_key: "twilio.make_call", name: "Make Call", description: "Initiate a voice call to a number", is_dangerous: true, requires_approval: true },
+    { feature_key: "twilio.list_numbers", name: "List Phone Numbers", description: "List purchased Twilio phone numbers", is_dangerous: false, requires_approval: false }
   ],
   ssh: [
     { feature_key: "ssh.exec_command", name: "Execute Command", description: "Run commands over SSH", is_dangerous: true, requires_approval: true },
@@ -152,20 +163,32 @@ const featureMap = {
     { feature_key: "stitch.trigger_sync", name: "Trigger Sync", description: "Trigger ETL sync", is_dangerous: false, requires_approval: false }
   ],
   notion: [
-    { feature_key: "notion.search", name: "Search Pages", description: "Search Notion workspace", is_dangerous: false, requires_approval: false },
-    { feature_key: "notion.create_page", name: "Create Page", description: "Create page in Notion DB", is_dangerous: true, requires_approval: false }
+    { feature_key: "notion.search", name: "Search Pages", description: "Search across Notion pages and databases", is_dangerous: false, requires_approval: false },
+    { feature_key: "notion.read_page", name: "Read Page", description: "Fetch a page and its block content", is_dangerous: false, requires_approval: false },
+    { feature_key: "notion.create_page", name: "Create Page", description: "Create a new page in a Notion database or page", is_dangerous: true, requires_approval: false },
+    { feature_key: "notion.query_database", name: "Query Database", description: "Filter and sort records in a Notion database", is_dangerous: false, requires_approval: false }
   ],
   airtable: [
-    { feature_key: "airtable.list_records", name: "List Records", description: "Fetch Airtable records", is_dangerous: false, requires_approval: false }
+    { feature_key: "airtable.list_records", name: "List Records", description: "Fetch records from a table", is_dangerous: false, requires_approval: false },
+    { feature_key: "airtable.create_record", name: "Create Record", description: "Insert a new record into a table", is_dangerous: true, requires_approval: false },
+    { feature_key: "airtable.update_record", name: "Update Record", description: "Update fields of an existing record", is_dangerous: true, requires_approval: false }
   ],
   hubspot: [
-    { feature_key: "hubspot.list_contacts", name: "List Contacts", description: "Fetch HubSpot contacts", is_dangerous: false, requires_approval: false }
+    { feature_key: "hubspot.list_contacts", name: "List Contacts", description: "Retrieve contacts from the CRM", is_dangerous: false, requires_approval: false },
+    { feature_key: "hubspot.create_contact", name: "Create Contact", description: "Add a new contact to HubSpot CRM", is_dangerous: true, requires_approval: false },
+    { feature_key: "hubspot.list_deals", name: "List Deals", description: "Retrieve deals from the sales pipeline", is_dangerous: false, requires_approval: false },
+    { feature_key: "hubspot.create_note", name: "Create Note", description: "Add a note, optionally associated with a contact", is_dangerous: false, requires_approval: false }
   ],
   stripe: [
-    { feature_key: "stripe.list_customers", name: "List Customers", description: "Fetch customers list", is_dangerous: false, requires_approval: false }
+    { feature_key: "stripe.list_customers", name: "List Customers", description: "Retrieve Stripe customers", is_dangerous: false, requires_approval: false },
+    { feature_key: "stripe.list_invoices", name: "List Invoices", description: "Fetch invoices, optionally filtered by customer", is_dangerous: false, requires_approval: false },
+    { feature_key: "stripe.create_charge", name: "Create Charge", description: "Initiate a payment charge", is_dangerous: true, requires_approval: true },
+    { feature_key: "stripe.create_refund", name: "Refund", description: "Issue a refund for a charge or payment intent", is_dangerous: true, requires_approval: true }
   ],
   linear: [
-    { feature_key: "linear.list_issues", name: "List Issues", description: "Fetch Linear issues", is_dangerous: false, requires_approval: false }
+    { feature_key: "linear.list_issues", name: "List Issues", description: "Fetch issues from a team or project", is_dangerous: false, requires_approval: false },
+    { feature_key: "linear.create_issue", name: "Create Issue", description: "Create a new issue in a team", is_dangerous: true, requires_approval: false },
+    { feature_key: "linear.update_issue", name: "Update Issue", description: "Change status, assignee, or priority of an issue", is_dangerous: true, requires_approval: false }
   ],
   ghl: [
     { feature_key: "ghl.list_contacts", name: "List Contacts", description: "Fetch GHL contacts", is_dangerous: false, requires_approval: false }
@@ -177,7 +200,8 @@ const featureMap = {
   ],
   postgresql: [
     { feature_key: "postgresql.query", name: "Query Database", description: "Run SELECT query", is_dangerous: false, requires_approval: false },
-    { feature_key: "postgresql.execute", name: "Execute Mutation", description: "Run INSERT/UPDATE/DELETE statement", is_dangerous: true, requires_approval: true }
+    { feature_key: "postgresql.execute", name: "Execute Mutation", description: "Run INSERT/UPDATE/DELETE statement", is_dangerous: true, requires_approval: true },
+    { feature_key: "postgresql.list_tables", name: "List Schema Tables", description: "List tables in a schema", is_dangerous: false, requires_approval: false }
   ],
   mysql: [
     { feature_key: "mysql.query", name: "Query Database", description: "Run SELECT query", is_dangerous: false, requires_approval: false },
@@ -206,7 +230,8 @@ const featureMap = {
   ],
   asana: [
     { feature_key: "asana.list_tasks", name: "List Tasks", description: "Get tasks in project", is_dangerous: false, requires_approval: false },
-    { feature_key: "asana.create_task", name: "Create Task", description: "Create task in project", is_dangerous: true, requires_approval: false }
+    { feature_key: "asana.create_task", name: "Create Task", description: "Create task in project", is_dangerous: true, requires_approval: false },
+    { feature_key: "asana.update_task", name: "Update Task", description: "Modify status, assignee, or details of a task", is_dangerous: false, requires_approval: false }
   ],
   shopify: [
     { feature_key: "shopify.get_products", name: "Get Products", description: "List store products", is_dangerous: false, requires_approval: false },
@@ -231,6 +256,20 @@ const featureMap = {
     { feature_key: "bigquery.run_job", name: "Run Query Job", description: "Submit an async BigQuery job and retrieve results", is_dangerous: false, requires_approval: false },
     { feature_key: "bigquery.list_tables", name: "List Tables", description: "List all tables in a BigQuery dataset", is_dangerous: false, requires_approval: false },
     { feature_key: "bigquery.insert_rows", name: "Insert Rows (Streaming)", description: "Stream rows into a BigQuery table", is_dangerous: true, requires_approval: false }
+  ],
+  whatsapp: [
+    { feature_key: "whatsapp.send_message", name: "Send Message", description: "Send a WhatsApp text message", is_dangerous: true, requires_approval: true },
+    { feature_key: "whatsapp.send_template", name: "Send Template", description: "Send a pre-approved WhatsApp template message", is_dangerous: true, requires_approval: true },
+    { feature_key: "whatsapp.list_templates", name: "List Templates", description: "List approved message templates for the business account", is_dangerous: false, requires_approval: false }
+  ],
+  facebook: [
+    { feature_key: "facebook.publish_post", name: "Publish Post", description: "Publish a post to the Facebook Page feed", is_dangerous: true, requires_approval: true },
+    { feature_key: "facebook.list_posts", name: "List Posts", description: "List recent posts on the Page", is_dangerous: false, requires_approval: false },
+    { feature_key: "facebook.page_insights", name: "Page Insights", description: "Retrieve Page engagement and impression metrics", is_dangerous: false, requires_approval: false }
+  ],
+  instagram: [
+    { feature_key: "instagram.publish_media", name: "Publish Media", description: "Publish an image or reel to the Instagram business account", is_dangerous: true, requires_approval: true },
+    { feature_key: "instagram.list_media", name: "List Media", description: "List recent media on the account", is_dangerous: false, requires_approval: false }
   ]
 };
 
@@ -248,7 +287,27 @@ const EXECUTABLE_BUILT_IN_SLUGS = new Set([
   "resend",
   "gmail-app",
   "serper",
-  "scrapedo"
+  "scrapedo",
+  // AI / LLM
+  "openrouter",
+  "openai",
+  "anthropic",
+  // Productivity / CRM / Payments
+  "notion",
+  "airtable",
+  "hubspot",
+  "stripe",
+  "linear",
+  // Communication / Marketing
+  "twilio",
+  "mailchimp",
+  "asana",
+  // Databases
+  "postgresql",
+  // Meta social automation
+  "whatsapp",
+  "facebook",
+  "instagram"
 ]);
 
 async function getOrCreateBuiltinTool(workspaceId, slug) {
@@ -388,9 +447,12 @@ export async function POST(request) {
 
     // SSH-specific columns — only include for SSH tool to avoid schema errors on migration
     const isSSHTool = tool.slug === "ssh";
+    // Database tools authenticate with a password stored in the shared encrypted_password column.
+    const PASSWORD_DB_SLUGS = new Set(["postgresql", "mysql", "oracle", "redis"]);
+    const storesDbPassword = PASSWORD_DB_SLUGS.has(tool.slug);
     const encryptedPrivateKey           = isSSHTool && parsed.credentials.private_key            ? encryptText(parsed.credentials.private_key)            : null;
     const encryptedPrivateKeyPassphrase = isSSHTool && parsed.credentials.private_key_passphrase ? encryptText(parsed.credentials.private_key_passphrase) : null;
-    const encryptedPassword             = isSSHTool && parsed.credentials.password               ? encryptText(parsed.credentials.password)               : null;
+    const encryptedPassword             = (isSSHTool || storesDbPassword) && parsed.credentials.password ? encryptText(parsed.credentials.password)        : null;
     const encryptedSudoPassword         = isSSHTool && parsed.credentials.sudo_password          ? encryptText(parsed.credentials.sudo_password)          : null;
 
     // Build credential row — only spread SSH columns when relevant
@@ -402,10 +464,12 @@ export async function POST(request) {
       encrypted_access_token: encryptedAccessToken,
       encrypted_refresh_token: encryptedRefreshToken,
       encrypted_client_secret: encryptedClientSecret,
+      ...((isSSHTool || storesDbPassword) && {
+        encrypted_password: encryptedPassword,
+      }),
       ...(isSSHTool && {
         encrypted_private_key: encryptedPrivateKey,
         encrypted_private_key_passphrase: encryptedPrivateKeyPassphrase,
-        encrypted_password: encryptedPassword,
         encrypted_sudo_password: encryptedSudoPassword,
       }),
     };

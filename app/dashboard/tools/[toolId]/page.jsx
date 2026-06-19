@@ -315,6 +315,11 @@ export default function ToolDetailPage({ params }) {
     } else if (tool.slug === "scrapedo") {
       credentials = { key: accountKey };
       resolvedEmail = "scrapedo-connected";
+    } else if (["whatsapp", "facebook", "instagram"].includes(tool.slug)) {
+      // Meta tools store the access token (key) plus the relevant object id in connection metadata.
+      const idKey = tool.slug === "whatsapp" ? "phone_number_id" : tool.slug === "facebook" ? "page_id" : "ig_user_id";
+      credentials = { key: accountKey, [idKey]: accountId };
+      resolvedEmail = accountId ? `${tool.slug}:${accountId}` : `${tool.slug}-connected`;
     } else if (["openrouter", "anthropic", "openai", "apify", "stitch", "notion", "airtable", "hubspot", "stripe", "linear"].includes(tool.slug)) {
       credentials = { key: accountKey };
       resolvedEmail = `${tool.slug}-connected`;
@@ -908,6 +913,43 @@ export default function ToolDetailPage({ params }) {
                       <button type="submit"
                         className="px-4 py-1.5 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary">
                         Connect Twilio Account
+                      </button>
+                    </div>
+                  </form>
+
+                /* ─── Meta Social (WhatsApp / Facebook / Instagram) ─── */
+                ) : ["whatsapp", "facebook", "instagram"].includes(tool.slug) ? (
+                  <form onSubmit={handleAddAccount} className="p-4 border border-dashed border-outline-variant/50 rounded bg-surface-container-lowest space-y-3">
+                    <p className="text-[9px] font-bold text-on-surface-variant uppercase font-mono tracking-wider mb-1">
+                      {tool.slug === "whatsapp" ? "WhatsApp Cloud API Settings" : tool.slug === "facebook" ? "Facebook Page Settings" : "Instagram Graph API Settings"}
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Account Label *</label>
+                        <input type="text" value={accountLabel} onChange={e => setAccountLabel(e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                          placeholder="e.g. Brand Page" />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">
+                          {tool.slug === "whatsapp" ? "Phone Number ID *" : tool.slug === "facebook" ? "Page ID *" : "Instagram User ID *"}
+                        </label>
+                        <input type="text" value={accountId} onChange={e => setAccountId(e.target.value)} required
+                          className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                          placeholder={tool.slug === "whatsapp" ? "1029384756" : tool.slug === "facebook" ? "Page numeric ID" : "IG business account ID"} />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Access Token *</label>
+                      <input type="password" value={accountKey} onChange={e => setAccountKey(e.target.value)} required
+                        className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                        placeholder="EAAB••••••••••••••" />
+                      <p className="text-[9px] text-on-surface-variant mt-1">Get from <strong>developers.facebook.com</strong> → your App → Graph API access token (long-lived recommended).</p>
+                    </div>
+                    <div className="flex justify-end">
+                      <button type="submit"
+                        className="px-4 py-1.5 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary">
+                        Connect {tool.name}
                       </button>
                     </div>
                   </form>
@@ -1580,7 +1622,7 @@ export default function ToolDetailPage({ params }) {
                         <p className="text-[9px] text-on-surface-variant mt-0.5">Connected {account.created_at.slice(0, 10)}</p>
                       </div>
                       
-                      {hasPermission("tools.disconnect_account") && account.user_id === user.id && (
+                      {hasPermission("tools.disconnect_account") && (
                         <div className="flex items-center gap-1.5">
                           {confirmingId === account.id ? (
                             <>

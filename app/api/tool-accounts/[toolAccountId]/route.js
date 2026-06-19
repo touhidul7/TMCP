@@ -6,23 +6,25 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 export async function DELETE(request, { params }) {
   try {
     const user = await requireUser(request);
-    // Only the owner of the tool account may delete it
+    // Disconnecting is a workspace-level action: anyone with the permission may
+    // remove any connected account within their own workspace (connections are
+    // shared resources, not owned per-user).
     await requirePermission(user, "tools.disconnect_account");
 
     const { toolAccountId } = await params;
 
-    // Verify the account exists and belongs to the user
+    // Verify the account exists and belongs to the caller's workspace
     const { data: account, error: accErr } = await supabaseAdmin
       .from("tool_accounts")
-      .select("id, user_id, workspace_id")
+      .select("id, workspace_id")
       .eq("id", toolAccountId)
-      .single();
+      .maybeSingle();
 
     if (accErr || !account) {
-      throw new Error("Tool account not found");
+      throw new Error("NotFound: Tool account not found");
     }
-    if (account.user_id !== user.id) {
-      throw new Error("You can only delete your own tool accounts");
+    if (account.workspace_id !== user.workspace_id) {
+      throw new Error("Forbidden: This tool account belongs to a different workspace");
     }
 
     // Cascade delete: credentials → agent permissions → account
@@ -39,7 +41,8 @@ export async function DELETE(request, { params }) {
     const { error: delErr } = await supabaseAdmin
       .from("tool_accounts")
       .delete()
-      .eq("id", toolAccountId);
+      .eq("id", toolAccountId)
+      .eq("workspace_id", user.workspace_id);
 
     if (delErr) throw delErr;
 
@@ -48,9 +51,14 @@ export async function DELETE(request, { params }) {
       message: "Tool account permanently deleted",
     });
   } catch (err) {
+    const message = err.message || "Failed to delete tool account";
+    const status = message.includes("Unauthorized") ? 401
+      : message.includes("Forbidden") ? 403
+      : message.includes("NotFound") ? 404
+      : 400;
     return NextResponse.json(
-      { success: false, error: err.message },
-      { status: err.message?.includes("You can only") ? 403 : 400 }
+      { success: false, error: message.replace(/^(NotFound|Forbidden|Unauthorized):\s*/, "") },
+      { status }
     );
   }
 }

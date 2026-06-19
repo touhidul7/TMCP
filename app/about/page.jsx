@@ -46,7 +46,7 @@ const stack = [
 ];
 
 const milestones = [
-  { phase: "Connect", text: "Attach provider accounts for email, search, scraping, databases, SSH, AI models, and custom APIs." },
+  { phase: "Connect", text: "Attach provider accounts for email, search, scraping, databases, SSH, AI models, social media, and custom APIs." },
   { phase: "Govern", text: "Scope each agent key to exact feature keys with limits and approval requirements." },
   { phase: "Execute", text: "Agents call one gateway endpoint and TMCP enforces policy on every request." },
   { phase: "Audit", text: "Every execution is logged with input, output, and approval trail for full traceability." }
