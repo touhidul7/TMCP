@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth/require-user";
+import { supabaseAdmin } from "@/lib/supabase/admin";
+const { decryptText } = require("@/lib/crypto/decrypt");
 
 const SYSTEM_PROMPT = `You are Tassistant, the integrated product copilot for the TMCP (Tool Management & Connection Platform) dashboard.
 Your tone is concise, professional, direct, and action-oriented.
@@ -69,12 +72,36 @@ function sanitizeMessages(messages) {
 }
 
 export async function POST(request) {
+  // Authenticate the caller and load their OpenRouter key from the database
+  // (the key is no longer sent from or stored in the browser).
+  let user;
   try {
-    const { openrouterKey, messages, context } = await request.json();
+    user = await requireUser(request);
+  } catch (authErr) {
+    return NextResponse.json(
+      { success: false, error: authErr.message || "Unauthorized" },
+      { status: 401 }
+    );
+  }
+
+  try {
+    const { messages, context } = await request.json();
+
+    const { data: settings, error: settingsErr } = await supabaseAdmin
+      .from("user_assistant_settings")
+      .select("encrypted_openrouter_key")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (settingsErr) throw settingsErr;
+
+    const openrouterKey = settings?.encrypted_openrouter_key
+      ? decryptText(settings.encrypted_openrouter_key)
+      : null;
 
     if (!openrouterKey || !openrouterKey.trim()) {
       return NextResponse.json(
-        { success: false, error: "OpenRouter API Key is missing. Please configure it in the Settings page." },
+        { success: false, error: "OpenRouter API Key is not configured. Add it in the Settings page." },
         { status: 400 }
       );
     }

@@ -4,7 +4,15 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Bot, X, Send, CornerDownLeft, Sparkles, MessageSquare, AlertCircle, Key, Trash2 } from "lucide-react";
 import { useMockStore } from "@/lib/mock-store";
+import { supabase } from "@/lib/supabase/client";
 import { GATEWAY_ENDPOINTS, getExampleInput, getGatewaySchemas } from "@/lib/docs/gateway-docs";
+
+async function getAuthHeaders() {
+  const { data: { session } } = await supabase.auth.getSession();
+  const headers = { "Content-Type": "application/json" };
+  if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
+  return headers;
+}
 
 export default function Tassistant() {
   const router = useRouter();
@@ -26,10 +34,8 @@ export default function Tassistant() {
     getWorkspaceStats
   } = useMockStore();
   const [isOpen, setIsOpen] = useState(false);
-  const [openrouterKey, setOpenrouterKey] = useState(() => {
-    if (typeof window === "undefined") return "";
-    return localStorage.getItem("tmcp_openrouter_key") || "";
-  });
+  // Whether the user has an OpenRouter key saved server-side (we never hold the key itself).
+  const [keyConfigured, setKeyConfigured] = useState(false);
   const [messages, setMessages] = useState([
     {
       role: "assistant",
@@ -78,13 +84,22 @@ export default function Tassistant() {
   ]);
 
   useEffect(() => {
-    const handleKeyChanged = () => {
-      setOpenrouterKey(localStorage.getItem("tmcp_openrouter_key") || "");
+    let active = true;
+    const refreshKeyStatus = async () => {
+      try {
+        const res = await fetch("/api/assistant/key", { headers: await getAuthHeaders() });
+        const data = await res.json();
+        if (active && data.success) setKeyConfigured(Boolean(data.configured));
+      } catch {
+        // Non-fatal: leave as not configured if the status check fails.
+      }
     };
 
-    window.addEventListener("tmcp_openrouter_key_changed", handleKeyChanged);
+    refreshKeyStatus();
+    window.addEventListener("tmcp_openrouter_key_changed", refreshKeyStatus);
     return () => {
-      window.removeEventListener("tmcp_openrouter_key_changed", handleKeyChanged);
+      active = false;
+      window.removeEventListener("tmcp_openrouter_key_changed", refreshKeyStatus);
     };
   }, []);
 
@@ -99,7 +114,7 @@ export default function Tassistant() {
     const text = textToSend || input;
     if (!text.trim() || isLoading) return;
 
-    if (!openrouterKey) {
+    if (!keyConfigured) {
       setError("Please configure your OpenRouter API Key in the Settings page.");
       return;
     }
@@ -111,12 +126,11 @@ export default function Tassistant() {
     setError("");
 
     try {
-      // We only send the message history to the backend endpoint, keeping the backend stateless
+      // The server loads the user's OpenRouter key from the database — it is never sent from the browser.
       const res = await fetch("/api/assistant/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({
-          openrouterKey,
           messages: newMessages.map(m => ({ role: m.role, content: m.content })),
           context: assistantContext
         })
@@ -352,7 +366,7 @@ export default function Tassistant() {
           </div>
 
           {/* Quick Action Suggestion Chips (Shown only when chat is idle and key exists) */}
-          {openrouterKey && messages.length === 1 && !isLoading && (
+          {keyConfigured && messages.length === 1 && !isLoading && (
             <div className="px-4 py-2.5 border-t border-outline-variant/30 bg-surface-container-lowest/50 space-y-1.5">
               <p className="text-[9px] font-semibold text-on-surface-variant uppercase font-mono tracking-wider">Quick Suggestions</p>
               <div className="flex flex-wrap gap-1.5">
@@ -370,7 +384,7 @@ export default function Tassistant() {
           )}
 
           {/* Key Not Set Warning Panel */}
-          {!openrouterKey && (
+          {!keyConfigured && (
             <div className="p-4 border-t border-outline-variant bg-surface-container-high/60 flex flex-col items-center text-center gap-3">
               <div className="w-8 h-8 rounded-full bg-warning/15 flex items-center justify-center text-warning">
                 <Key className="w-4 h-4" />
@@ -394,7 +408,7 @@ export default function Tassistant() {
           )}
 
           {/* Input Panel */}
-          {openrouterKey && (
+          {keyConfigured && (
             <div className="p-3 bg-surface-container-high border-t border-outline-variant flex items-end gap-2 relative">
               <textarea
                 value={input}

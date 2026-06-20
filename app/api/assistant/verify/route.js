@@ -1,6 +1,16 @@
 import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth/require-user";
 
 export async function POST(request) {
+  try {
+    await requireUser(request);
+  } catch (authErr) {
+    return NextResponse.json(
+      { success: false, error: authErr.message || "Unauthorized" },
+      { status: 401 }
+    );
+  }
+
   try {
     const { openrouterKey } = await request.json();
 

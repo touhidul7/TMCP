@@ -1,43 +1,78 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMockStore } from "@/lib/mock-store";
 import DashboardHeader from "@/components/dashboard-header";
-import { KeyRound, RefreshCw, Eye, EyeOff, Check, Loader2, Bot } from "lucide-react";
+import { supabase } from "@/lib/supabase/client";
+import { ShieldCheck, Eye, EyeOff, Check, Loader2, Trash2 } from "lucide-react";
+
+async function getAuthHeaders() {
+  const { data: { session } } = await supabase.auth.getSession();
+  const headers = { "Content-Type": "application/json" };
+  if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
+  return headers;
+}
 
 export default function SettingsPage() {
   const { user, workspaces, currentWorkspace, hasPermission } = useMockStore();
   const activeWorkspaceName = workspaces.find(w => w.id === currentWorkspace)?.name || "TMCP Default Workspace";
   const [workspaceNameDraft, setWorkspaceNameDraft] = useState(null);
   const workspaceName = workspaceNameDraft ?? activeWorkspaceName;
-  const [encryptionKey, setEncryptionKey] = useState(() => {
-    if (typeof window === "undefined") return "";
-    const savedKey = localStorage.getItem("tmcp_encryption_key");
-    if (savedKey) return savedKey;
-    const newKey = "4c9e8d35f8c6b2da71e09dfa5342a1bc8f9024ea10c3b8da76c24be812d4fae0";
-    localStorage.setItem("tmcp_encryption_key", newKey);
-    return newKey;
-  });
-  const [rotated, setRotated] = useState(false);
-
-  // OpenRouter key for Tassistant Chatbot
-  const [openrouterKey, setOpenrouterKey] = useState(() => {
-    if (typeof window === "undefined") return "";
-    return localStorage.getItem("tmcp_openrouter_key") || "";
-  });
+  // OpenRouter key for Tassistant Chatbot — stored encrypted server-side, never in the browser.
+  const [openrouterKey, setOpenrouterKey] = useState("");
+  const [keyConfigured, setKeyConfigured] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [verifySuccess, setVerifySuccess] = useState(false);
   const [verifyError, setVerifyError] = useState("");
   const [saveStatus, setSaveStatus] = useState("");
 
-  const handleSaveOpenRouterKey = (e) => {
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/assistant/key", { headers: await getAuthHeaders() });
+        const data = await res.json();
+        if (active && data.success) setKeyConfigured(Boolean(data.configured));
+      } catch {
+        // Non-fatal: treat as not configured if we cannot reach the server.
+      }
+    })();
+    return () => { active = false; };
+  }, []);
+
+  const handleSaveOpenRouterKey = async (e) => {
     e.preventDefault();
-    localStorage.setItem("tmcp_openrouter_key", openrouterKey.trim());
-    setSaveStatus("Saved successfully!");
-    // Trigger custom event so the floating widget knows the key was updated
-    window.dispatchEvent(new Event("tmcp_openrouter_key_changed"));
-    setTimeout(() => setSaveStatus(""), 3000);
+    setVerifyError("");
+    setVerifySuccess(false);
+    if (!openrouterKey.trim()) {
+      setVerifyError("Please enter an OpenRouter key first.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/assistant/key", {
+        method: "POST",
+        headers: await getAuthHeaders(),
+        body: JSON.stringify({ openrouterKey: openrouterKey.trim() })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setKeyConfigured(true);
+        setOpenrouterKey("");
+        setSaveStatus("Saved securely on the server.");
+        // Tell the floating widget the key state changed.
+        window.dispatchEvent(new Event("tmcp_openrouter_key_changed"));
+        setTimeout(() => setSaveStatus(""), 3000);
+      } else {
+        setVerifyError(data.error || "Failed to save key");
+      }
+    } catch (err) {
+      setVerifyError("Network error: " + err.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleVerifyOpenRouterKey = async () => {
@@ -52,7 +87,7 @@ export default function SettingsPage() {
     try {
       const res = await fetch("/api/assistant/verify", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({ openrouterKey: openrouterKey.trim() })
       });
       const data = await res.json();
@@ -68,23 +103,32 @@ export default function SettingsPage() {
     }
   };
 
-  const handleRotateKey = () => {
-    if (confirm("WARNING: Rotating the encryption key will require re-encryption of all stored third-party credentials. Proceed?")) {
-      const array = new Uint8Array(32);
-      window.crypto.getRandomValues(array);
-      const newKey = Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
-      setEncryptionKey(newKey);
-      localStorage.setItem("tmcp_encryption_key", newKey);
-      setRotated(true);
-      setTimeout(() => setRotated(false), 3000);
+  const handleRemoveOpenRouterKey = async () => {
+    if (!confirm("Remove the saved OpenRouter key? Tassistant will stop working until a new key is added.")) return;
+    setSaving(true);
+    setVerifyError("");
+    try {
+      const res = await fetch("/api/assistant/key", { method: "DELETE", headers: await getAuthHeaders() });
+      const data = await res.json();
+      if (data.success) {
+        setKeyConfigured(false);
+        setOpenrouterKey("");
+        setSaveStatus("Key removed.");
+        window.dispatchEvent(new Event("tmcp_openrouter_key_changed"));
+        setTimeout(() => setSaveStatus(""), 3000);
+      } else {
+        setVerifyError(data.error || "Failed to remove key");
+      }
+    } catch (err) {
+      setVerifyError("Network error: " + err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleResetWorkspace = () => {
     if (confirm("CRITICAL WARNING: This will delete all local agents, custom tools, API keys, and logs from local storage, returning the workspace to its default seed data. Proceed?")) {
       localStorage.removeItem("tmcp_store");
-      localStorage.removeItem("tmcp_encryption_key");
-      localStorage.removeItem("tmcp_openrouter_key");
       window.location.reload();
     }
   };
@@ -127,41 +171,26 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Encryption keys security parameters */}
+        {/* Encryption status */}
         <div className="bg-surface-container border border-outline-variant p-6 rounded space-y-4">
           <div>
             <h3 className="text-sm font-bold text-on-surface">Credentials Encryption (AES-256-GCM)</h3>
-            <p className="text-[10px] text-on-surface-variant font-mono uppercase tracking-wider mt-0.5">Secret workspace key used to seal client tokens</p>
+            <p className="text-[10px] text-on-surface-variant font-mono uppercase tracking-wider mt-0.5">Server-managed encryption for stored tokens</p>
           </div>
 
           <div className="space-y-4">
             <p className="text-xs text-on-surface-variant leading-relaxed">
-              We secure third-party credentials (like Gmail tokens and Hunter keys) on our database layer using AES-256-GCM encryption. The encryption key below is unique to your workspace and should never be exposed.
+              Third-party credentials (Gmail tokens, API keys, database passwords, and similar) are encrypted at rest
+              with AES-256-GCM before they are stored. The master encryption key is held only in the server
+              environment (<code className="font-mono text-on-surface">APP_ENCRYPTION_KEY</code>) and is never sent to
+              the browser, embedded in the app, or exposed in this page.
             </p>
 
-            <div className="flex items-center gap-2 bg-surface-container-lowest p-3 rounded border border-outline-variant/40 font-mono text-xs select-all">
-              <KeyRound className="text-primary w-4 h-4 mr-1" />
-              <code className="flex-1 truncate text-on-surface font-bold">
-                {encryptionKey}
-              </code>
+            <div className="flex items-center gap-2 bg-surface-container-lowest p-3 rounded border border-green-500/20 text-xs">
+              <ShieldCheck className="text-green-400 w-4 h-4 shrink-0" />
+              <span className="text-on-surface font-semibold">Encryption active</span>
+              <span className="text-on-surface-variant">— key managed securely server-side.</span>
             </div>
-
-            {hasPermission("settings.edit") && (
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={handleRotateKey}
-                  className="px-4 py-2 border border-outline bg-surface-container-low hover:bg-surface-container-highest transition-colors rounded text-xs text-on-surface font-semibold flex items-center gap-1.5 cursor-pointer glow-primary"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  Rotate Encryption Key
-                </button>
-                {rotated && (
-                  <span className="text-[10px] font-mono text-green-400 font-semibold animate-pulse">
-                    Success: Key rotated and data re-sealed.
-                  </span>
-                )}
-              </div>
-            )}
           </div>
         </div>
 
@@ -174,8 +203,27 @@ export default function SettingsPage() {
 
           <form onSubmit={handleSaveOpenRouterKey} className="space-y-4">
             <p className="text-xs text-on-surface-variant leading-relaxed">
-              Tassistant is a floating virtual assistant that resides globally on your dashboard to answer questions and troubleshoot agent connection issues. To activate it, enter your OpenRouter API Key.
+              Tassistant is a floating virtual assistant that resides globally on your dashboard to answer questions and troubleshoot agent connection issues. To activate it, enter your OpenRouter API Key. The key is encrypted and stored on the server — it is never kept in your browser.
             </p>
+
+            {keyConfigured && (
+              <div className="flex items-center justify-between gap-2 bg-surface-container-lowest p-3 rounded border border-green-500/20 text-xs">
+                <span className="flex items-center gap-2">
+                  <ShieldCheck className="text-green-400 w-4 h-4 shrink-0" />
+                  <span className="text-on-surface font-semibold">A key is configured</span>
+                  <span className="text-on-surface-variant">— enter a new key below to replace it.</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={handleRemoveOpenRouterKey}
+                  disabled={saving}
+                  className="px-2.5 py-1 border border-error/30 bg-error/10 hover:bg-error/20 rounded text-[10px] font-bold text-error flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  Remove
+                </button>
+              </div>
+            )}
 
             <div className="flex gap-2">
               <div className="relative flex-1">
@@ -184,7 +232,7 @@ export default function SettingsPage() {
                   value={openrouterKey}
                   onChange={(e) => setOpenrouterKey(e.target.value)}
                   className="w-full bg-surface-container-lowest border border-outline-variant rounded px-3 py-2 text-xs text-on-surface focus:border-primary outline-none pr-10"
-                  placeholder="sk-or-v1-..."
+                  placeholder={keyConfigured ? "Enter a new key to replace the saved one" : "sk-or-v1-..."}
                 />
                 <button
                   type="button"
@@ -197,8 +245,10 @@ export default function SettingsPage() {
 
               <button
                 type="submit"
-                className="px-4 py-2 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary flex items-center gap-1.5"
+                disabled={saving}
+                className="px-4 py-2 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary flex items-center gap-1.5 disabled:opacity-50"
               >
+                {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 Save Key
               </button>
 
