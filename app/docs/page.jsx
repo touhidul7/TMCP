@@ -5,7 +5,7 @@ import Link from "next/link";
 import GatewayCodeTabs from "@/components/gateway-code-tabs";
 import { ProductSignal, PublicFooter, PublicHeader } from "@/components/public-shell";
 import { useMockStore } from "@/lib/mock-store";
-import { GATEWAY_ENDPOINTS, buildGatewaySnippets, buildGetSnippets, getGatewaySchemas } from "@/lib/docs/gateway-docs";
+import { GATEWAY_ENDPOINTS, ROTATE_ENDPOINTS, buildGatewaySnippets, buildGetSnippets, buildRotateSnippets, getGatewaySchemas } from "@/lib/docs/gateway-docs";
 import { BookOpen, Check, Copy, FileJson, KeyRound, Lock, Network, ShieldCheck, Terminal } from "lucide-react";
 
 const DOC_SECTIONS = [
@@ -15,6 +15,7 @@ const DOC_SECTIONS = [
   { id: "discovery", label: "Discovery & Status" },
   { id: "examples", label: "Execute Examples" },
   { id: "schemas", label: "Schemas" },
+  { id: "rotate", label: "API Key Rotation" },
   { id: "tools", label: "Tool Reference" }
 ];
 
@@ -22,6 +23,11 @@ const GET_EXAMPLES = [
   { path: "/api/gateway/tools", description: "List the connected accounts and feature keys the calling agent is allowed to use." },
   { path: "/api/gateway/status", description: "Validate the API key and return the active agent identity." },
   { path: "/api/gateway/docs", description: "Fetch the agent-readable endpoint reference, schemas, and live examples." }
+];
+
+const ROTATE_PROVIDER_EXAMPLES = [
+  { name: "Gemini API Rotate", basePath: "/api/gemini/v1", model: "gemini-2.5-flash" },
+  { name: "OpenRouter API Rotate", basePath: "/api/openrouter/v1", model: "openai/gpt-4o-mini" }
 ];
 
 export default function PublicDocumentationPage() {
@@ -214,6 +220,63 @@ export default function PublicDocumentationPage() {
         <section id="schemas" className="mx-auto grid max-w-7xl scroll-mt-28 grid-cols-1 gap-6 px-5 pb-10 xl:grid-cols-2 lg:px-8">
           <SchemaPanel title="Execute Request" data={schemas.execute_request} />
           <SchemaPanel title="Gateway Responses" data={{ ...schemas.execute_success, ...schemas.approval_response }} />
+        </section>
+
+        <section id="rotate" className="mx-auto max-w-7xl scroll-mt-28 px-5 pb-10 lg:px-8">
+          <div className="overflow-hidden rounded border border-outline-variant bg-surface-container">
+            <div className="border-b border-outline-variant bg-surface-container-lowest px-6 py-4">
+              <h2 className="text-sm font-bold text-on-surface">OpenAI-Compatible API Key Rotation</h2>
+              <p className="mt-0.5 text-[10px] font-mono uppercase tracking-wider text-on-surface-variant">
+                Gemini API Rotate &amp; OpenRouter API Rotate
+              </p>
+            </div>
+            <div className="space-y-8 p-6">
+              <p className="max-w-3xl text-xs leading-relaxed text-on-surface-variant">
+                Connect a <span className="font-semibold text-on-surface">Gemini API Rotate</span> or{" "}
+                <span className="font-semibold text-on-surface">OpenRouter API Rotate</span> tool, add multiple provider
+                API keys to its pool, then point any OpenAI-compatible client at TMCP using your single agent API key.
+                TMCP rotates across the pool round-robin, marks keys that return <code className="font-mono text-on-surface">429</code>/quota
+                errors as cooling down, retries the next key automatically, and returns the provider&apos;s original
+                error only once every key is exhausted.
+              </p>
+
+              <p className="max-w-3xl text-xs leading-relaxed text-on-surface-variant">
+                Each tool has its <span className="font-semibold text-on-surface">own dedicated base URL</span> so you can
+                drop it straight into any app&apos;s &quot;OpenAI-compatible base URL&quot; field — no model-name routing
+                required. The endpoints under each base are{" "}
+                {ROTATE_ENDPOINTS.map((ep, i) => (
+                  <span key={ep.path}>
+                    <code className="font-mono text-on-surface">{ep.path}</code>{i < ROTATE_ENDPOINTS.length - 1 ? ", " : "."}
+                  </span>
+                ))}
+              </p>
+
+              {ROTATE_PROVIDER_EXAMPLES.map((p) => (
+                <div key={p.basePath} className="space-y-3">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <h3 className="text-sm font-bold text-on-surface">{p.name}</h3>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant">Base URL</span>
+                      <code className="rounded border border-outline-variant/50 bg-surface-container-low px-2 py-1 text-[11px] font-bold text-primary">{baseUrl}{p.basePath}</code>
+                    </div>
+                  </div>
+                  <GatewayCodeTabs snippets={buildRotateSnippets({ baseUrl, basePath: p.basePath, model: p.model })} />
+                </div>
+              ))}
+
+              <p className="text-[11px] leading-relaxed text-on-surface-variant">
+                Streaming is supported — pass <code className="font-mono text-on-surface">{`"stream": true"`}</code> and TMCP relays the
+                provider&apos;s Server-Sent Events stream unchanged. List acceptable model ids with{" "}
+                <code className="font-mono text-on-surface">GET {`{base}`}/models</code>. Standard parameters
+                (<code className="font-mono text-on-surface">temperature</code>, <code className="font-mono text-on-surface">top_p</code>,
+                <code className="font-mono text-on-surface"> max_tokens</code>, …) are forwarded to the provider as-is.
+              </p>
+              <p className="text-[11px] leading-relaxed text-on-surface-variant">
+                Prefer a single endpoint? <code className="font-mono text-on-surface">{baseUrl}/api/v1</code> also works and
+                auto-selects the provider from the model name (<code className="font-mono text-on-surface">gemini*</code> &rarr; Gemini, otherwise OpenRouter).
+              </p>
+            </div>
+          </div>
         </section>
 
         <section id="tools" className="mx-auto max-w-7xl scroll-mt-28 px-5 pb-16 lg:px-8">

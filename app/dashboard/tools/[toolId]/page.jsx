@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useMockStore } from "@/lib/mock-store";
 import DashboardHeader from "@/components/dashboard-header";
 import GatewayCodeTabs from "@/components/gateway-code-tabs";
+import KeyPoolManager from "@/components/key-pool-manager";
+import { buildRotateSnippets } from "@/lib/docs/gateway-docs";
 import { ArrowLeft, Puzzle, ExternalLink, Unplug, Pencil, X, Check, ChevronDown, ChevronUp, Trash2, BookOpen } from "lucide-react";
 
 export default function ToolDetailPage({ params }) {
@@ -122,6 +124,9 @@ export default function ToolDetailPage({ params }) {
   const isCustomRest = tool.tool_type === "custom_rest";
   const isCustomMcp  = tool.tool_type === "custom_mcp";
   const isBuiltIn    = tool.tool_type === "built_in";
+  const isRotateTool = tool.slug === "gemini-rotate" || tool.slug === "openrouter-rotate";
+  const rotateBasePath = tool.slug === "gemini-rotate" ? "/api/gemini/v1" : "/api/openrouter/v1";
+  const rotateModel = tool.slug === "gemini-rotate" ? "gemini-2.5-flash" : "openai/gpt-4o-mini";
 
   // Initialize edit form when opening
   const openEdit = () => {
@@ -315,6 +320,10 @@ export default function ToolDetailPage({ params }) {
     } else if (tool.slug === "scrapedo") {
       credentials = { key: accountKey };
       resolvedEmail = "scrapedo-connected";
+    } else if (["gemini-rotate", "openrouter-rotate"].includes(tool.slug)) {
+      // Rotate tools hold a pool of keys (added separately), so the account itself stores no single key.
+      credentials = {};
+      resolvedEmail = `${tool.slug}-pool`;
     } else if (["whatsapp", "facebook", "instagram"].includes(tool.slug)) {
       // Meta tools store the access token (key) plus the relevant object id in connection metadata.
       const idKey = tool.slug === "whatsapp" ? "phone_number_id" : tool.slug === "facebook" ? "page_id" : "ig_user_id";
@@ -913,6 +922,29 @@ export default function ToolDetailPage({ params }) {
                       <button type="submit"
                         className="px-4 py-1.5 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary">
                         Connect Twilio Account
+                      </button>
+                    </div>
+                  </form>
+
+                /* ─── API Key Rotation pool account ─── */
+                ) : ["gemini-rotate", "openrouter-rotate"].includes(tool.slug) ? (
+                  <form onSubmit={handleAddAccount} className="p-4 border border-dashed border-outline-variant/50 rounded bg-surface-container-lowest space-y-3">
+                    <p className="text-[9px] font-bold text-on-surface-variant uppercase font-mono tracking-wider mb-1">Create Rotation Pool</p>
+                    <div>
+                      <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Pool Label *</label>
+                      <input type="text" value={accountLabel} onChange={e => setAccountLabel(e.target.value)} required
+                        className="w-full bg-surface-container-lowest border border-outline-variant rounded px-2.5 py-1.5 text-xs text-on-surface focus:border-primary outline-none"
+                        placeholder="e.g. Production Key Pool" />
+                    </div>
+                    <p className="text-[10px] text-on-surface-variant leading-relaxed">
+                      Create the pool first, then add multiple API keys to it below. This tool gets its own dedicated
+                      OpenAI-compatible base URL (<code className="font-mono text-on-surface">{tool.slug === "gemini-rotate" ? "/api/gemini/v1" : "/api/openrouter/v1"}</code>)
+                      — drop it into any OpenAI-compatible app with a TMCP agent key, and TMCP rotates across the pool with automatic failover.
+                    </p>
+                    <div className="flex justify-end">
+                      <button type="submit"
+                        className="px-4 py-1.5 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary">
+                        Create Pool
                       </button>
                     </div>
                   </form>
@@ -1605,7 +1637,8 @@ export default function ToolDetailPage({ params }) {
               {/* Accounts Table */}
               <div className="space-y-2">
                 {connectedAccounts.map((account) => (
-                  <div key={account.id} className="flex items-center justify-between p-3.5 bg-surface-container-low border border-outline-variant/65 rounded">
+                  <div key={account.id}>
+                  <div className="flex items-center justify-between p-3.5 bg-surface-container-low border border-outline-variant/65 rounded">
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-bold text-on-surface">{account.label}</span>
@@ -1654,6 +1687,10 @@ export default function ToolDetailPage({ params }) {
                         </div>
                       )}
                     </div>
+                  </div>
+                  {isRotateTool && (
+                    <KeyPoolManager toolAccountId={account.id} providerLabel={tool.provider} toolSlug={tool.slug} />
+                  )}
                   </div>
                 ))}
 
@@ -1711,39 +1748,61 @@ export default function ToolDetailPage({ params }) {
                     API Documentation
                   </h3>
                   <p className="text-[10px] text-on-surface-variant font-mono uppercase tracking-wider mt-0.5">
-                    cURL, JavaScript, and Python examples
+                    {isRotateTool ? "OpenAI-compatible usage" : "cURL, JavaScript, and Python examples"}
                   </p>
                 </div>
-                {exampleAccountId && (
+                {!isRotateTool && exampleAccountId && (
                   <span className="px-2 py-0.5 rounded font-mono text-[8px] bg-green-500/10 text-green-400 border border-green-500/20 uppercase font-bold">
                     Account Selected
                   </span>
                 )}
               </div>
 
-              {!exampleAccountId && (
-                <div className="p-3 bg-tertiary/10 border border-tertiary/20 rounded text-[11px] text-on-surface-variant leading-relaxed">
-                  Connect an account to include a concrete <code className="text-primary font-mono">account_id</code> in these examples.
-                </div>
-              )}
-
-              <div className="space-y-4">
-                {toolFeatures.map((feat) => (
-                  <div key={`docs-${feat.id}`} className="space-y-2">
-                    <div>
-                      <code className="text-[11px] font-bold text-primary font-mono">{feat.feature_key}</code>
-                      <p className="text-[11px] text-on-surface-variant mt-1">{feat.description}</p>
-                    </div>
-                    <GatewayCodeTabs
-                      baseUrl={baseUrl}
-                      toolSlug={tool.slug}
-                      featureKey={feat.feature_key}
-                      accountId={exampleAccountId}
-                      compact
-                    />
+              {isRotateTool ? (
+                <div className="space-y-3">
+                  <div className="rounded border border-primary/20 bg-primary/5 p-3 space-y-1">
+                    <p className="text-[9px] font-bold uppercase font-mono tracking-wider text-on-surface-variant">Base URL</p>
+                    <code className="block truncate text-[12px] font-bold text-primary font-mono">{baseUrl}{rotateBasePath}</code>
+                    <p className="text-[10px] text-on-surface-variant leading-relaxed">
+                      Set this as the base URL in any OpenAI-compatible app and use a TMCP agent API key
+                      (<code className="font-mono text-on-surface">mcp_live_…</code>) as the bearer token. Endpoints:
+                      <code className="font-mono text-on-surface"> /chat/completions</code>,
+                      <code className="font-mono text-on-surface"> /responses</code>,
+                      <code className="font-mono text-on-surface"> /embeddings</code>.
+                    </p>
                   </div>
-                ))}
-              </div>
+                  <GatewayCodeTabs compact snippets={buildRotateSnippets({ baseUrl, basePath: rotateBasePath, model: rotateModel })} />
+                  <p className="text-[10px] text-on-surface-variant leading-relaxed">
+                    Add your provider keys to the pool above. TMCP rotates them automatically and fails over on rate-limit/quota errors.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {!exampleAccountId && (
+                    <div className="p-3 bg-tertiary/10 border border-tertiary/20 rounded text-[11px] text-on-surface-variant leading-relaxed">
+                      Connect an account to include a concrete <code className="text-primary font-mono">account_id</code> in these examples.
+                    </div>
+                  )}
+
+                  <div className="space-y-4">
+                    {toolFeatures.map((feat) => (
+                      <div key={`docs-${feat.id}`} className="space-y-2">
+                        <div>
+                          <code className="text-[11px] font-bold text-primary font-mono">{feat.feature_key}</code>
+                          <p className="text-[11px] text-on-surface-variant mt-1">{feat.description}</p>
+                        </div>
+                        <GatewayCodeTabs
+                          baseUrl={baseUrl}
+                          toolSlug={tool.slug}
+                          featureKey={feat.feature_key}
+                          accountId={exampleAccountId}
+                          compact
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Recent Logs (Filtered) */}

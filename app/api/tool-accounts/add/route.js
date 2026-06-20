@@ -77,7 +77,11 @@ const TOOL_META = {
   // Meta social automation
   whatsapp:     { name: "WhatsApp Business", provider: "Meta",       category: "Communication",  desc: "Send WhatsApp messages and templates via the Meta Cloud API.", url: "https://business.whatsapp.com" },
   facebook:     { name: "Facebook Page",   provider: "Meta",         category: "Marketing",      desc: "Publish posts, read posts, and pull insights for a Facebook Page.", url: "https://facebook.com" },
-  instagram:    { name: "Instagram",       provider: "Meta",         category: "Marketing",      desc: "Publish media and read recent posts from an Instagram business account.", url: "https://instagram.com" }
+  instagram:    { name: "Instagram",       provider: "Meta",         category: "Marketing",      desc: "Publish media and read recent posts from an Instagram business account.", url: "https://instagram.com" },
+
+  // API key rotation (OpenAI-compatible gateway)
+  "gemini-rotate":     { name: "Gemini API Rotate",     provider: "Google",     category: "AI/LLM", desc: "Store multiple Gemini API keys and call them through one TMCP key with automatic rotation and failover.", url: "https://ai.google.dev" },
+  "openrouter-rotate": { name: "OpenRouter API Rotate", provider: "OpenRouter", category: "AI/LLM", desc: "Store multiple OpenRouter API keys and call them through one TMCP key with automatic rotation and failover.", url: "https://openrouter.ai" }
 };
 
 const featureMap = {
@@ -270,6 +274,16 @@ const featureMap = {
   instagram: [
     { feature_key: "instagram.publish_media", name: "Publish Media", description: "Publish an image or reel to the Instagram business account", is_dangerous: true, requires_approval: true },
     { feature_key: "instagram.list_media", name: "List Media", description: "List recent media on the account", is_dangerous: false, requires_approval: false }
+  ],
+  "gemini-rotate": [
+    { feature_key: "gemini_rotate.chat", name: "Chat Completions", description: "OpenAI-compatible /v1/chat/completions routed across the Gemini key pool", is_dangerous: false, requires_approval: false },
+    { feature_key: "gemini_rotate.responses", name: "Responses", description: "OpenAI-compatible /v1/responses routed across the Gemini key pool", is_dangerous: false, requires_approval: false },
+    { feature_key: "gemini_rotate.embeddings", name: "Embeddings", description: "OpenAI-compatible /v1/embeddings routed across the Gemini key pool", is_dangerous: false, requires_approval: false }
+  ],
+  "openrouter-rotate": [
+    { feature_key: "openrouter_rotate.chat", name: "Chat Completions", description: "OpenAI-compatible /v1/chat/completions routed across the OpenRouter key pool", is_dangerous: false, requires_approval: false },
+    { feature_key: "openrouter_rotate.responses", name: "Responses", description: "OpenAI-compatible /v1/responses routed across the OpenRouter key pool", is_dangerous: false, requires_approval: false },
+    { feature_key: "openrouter_rotate.embeddings", name: "Embeddings", description: "OpenAI-compatible /v1/embeddings routed across the OpenRouter key pool", is_dangerous: false, requires_approval: false }
   ]
 };
 
@@ -310,10 +324,18 @@ const EXECUTABLE_BUILT_IN_SLUGS = new Set([
   "instagram"
 ]);
 
+// Rotate tools are not executed through /api/gateway/execute; they are consumed via the
+// OpenAI-compatible /api/v1/* endpoints and manage a pool of keys instead of one credential.
+const ROTATE_TOOL_SLUGS = new Set(["gemini-rotate", "openrouter-rotate"]);
+
+function isConnectableBuiltin(slug) {
+  return EXECUTABLE_BUILT_IN_SLUGS.has(slug) || ROTATE_TOOL_SLUGS.has(slug);
+}
+
 async function getOrCreateBuiltinTool(workspaceId, slug) {
   const meta = TOOL_META[slug];
   if (!meta) return null;
-  if (!EXECUTABLE_BUILT_IN_SLUGS.has(slug)) {
+  if (!isConnectableBuiltin(slug)) {
     throw new Error(`Built-in tool '${slug}' is listed in the catalog but is not executable by the gateway yet.`);
   }
 
@@ -385,7 +407,7 @@ export async function POST(request) {
     if (toolError || !tool) {
       throw new Error("Associated tool not found");
     }
-    if (tool.tool_type === "built_in" && !EXECUTABLE_BUILT_IN_SLUGS.has(tool.slug)) {
+    if (tool.tool_type === "built_in" && !isConnectableBuiltin(tool.slug)) {
       throw new Error(`Built-in tool '${tool.slug}' is listed in the catalog but is not executable by the gateway yet.`);
     }
 
