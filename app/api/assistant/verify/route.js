@@ -30,7 +30,7 @@ export async function POST(request) {
         "X-Title": "TMCP Tassistant Gateway Verification"
       },
       body: JSON.stringify({
-        model: "openai/gpt-oss-20b:free",
+        model: "nvidia/nemotron-3-super-120b-a12b:free",
         messages: [
           { role: "user", content: "Ping" }
         ],
