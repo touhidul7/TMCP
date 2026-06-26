@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/require-user";
+const { chatCompletionsUrl, resolveModel } = require("@/lib/assistant/config");
 
 export async function POST(request) {
   try {
@@ -12,16 +13,16 @@ export async function POST(request) {
   }
 
   try {
-    const { openrouterKey } = await request.json();
+    const { openrouterKey, baseUrl, model } = await request.json();
 
     if (!openrouterKey || !openrouterKey.trim()) {
       return NextResponse.json(
-        { success: false, error: "OpenRouter API key is required" },
+        { success: false, error: "API key is required" },
         { status: 400 }
       );
     }
 
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const response = await fetch(chatCompletionsUrl(baseUrl), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -30,7 +31,7 @@ export async function POST(request) {
         "X-Title": "TMCP Tassistant Gateway Verification"
       },
       body: JSON.stringify({
-        model: "nvidia/nemotron-3-super-120b-a12b:free",
+        model: resolveModel(model),
         messages: [
           { role: "user", content: "Ping" }
         ],
@@ -51,9 +52,9 @@ export async function POST(request) {
     return NextResponse.json({ success: true, message: "Connection verified successfully!" });
 
   } catch (err) {
-    console.error("OpenRouter verification error:", err);
+    console.error("Tassistant verification error:", err);
     return NextResponse.json(
-      { success: false, error: err.message || "Failed to verify connection to OpenRouter" },
+      { success: false, error: err.message || "Failed to verify connection to the assistant endpoint" },
       { status: 500 }
     );
   }

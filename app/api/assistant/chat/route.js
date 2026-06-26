@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/require-user";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 const { decryptText } = require("@/lib/crypto/decrypt");
+const { chatCompletionsUrl, resolveModel } = require("@/lib/assistant/config");
 
 const SYSTEM_PROMPT = `You are Tassistant, the integrated product copilot for the TMCP (Tool Management & Connection Platform) dashboard.
 Your tone is concise, professional, direct, and action-oriented.
@@ -90,7 +91,7 @@ export async function POST(request) {
 
     const { data: settings, error: settingsErr } = await supabaseAdmin
       .from("user_assistant_settings")
-      .select("encrypted_openrouter_key")
+      .select("encrypted_openrouter_key, base_url, model")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -102,10 +103,13 @@ export async function POST(request) {
 
     if (!openrouterKey || !openrouterKey.trim()) {
       return NextResponse.json(
-        { success: false, error: "OpenRouter API Key is not configured. Add it in the Settings page." },
+        { success: false, error: "Tassistant API Key is not configured. Add it in the Settings page." },
         { status: 400 }
       );
     }
+
+    const endpoint = chatCompletionsUrl(settings?.base_url);
+    const model = resolveModel(settings?.model);
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json(
@@ -129,7 +133,7 @@ export async function POST(request) {
       ...sanitizedMessages
     ];
 
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -138,7 +142,7 @@ export async function POST(request) {
         "X-Title": "TMCP Tassistant Gateway Chat"
       },
       body: JSON.stringify({
-        model: "openai/gpt-oss-20b:free",
+        model,
         messages: formattedMessages,
         max_tokens: 900,
         temperature: 0.2
@@ -161,7 +165,7 @@ export async function POST(request) {
   } catch (err) {
     console.error("Tassistant chat endpoint error:", err);
     return NextResponse.json(
-      { success: false, error: err.message || "An unexpected error occurred while communicating with OpenRouter" },
+      { success: false, error: err.message || "An unexpected error occurred while communicating with the assistant endpoint" },
       { status: 500 }
     );
   }

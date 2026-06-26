@@ -5,7 +5,7 @@ TMCP is a Next.js 16 dashboard and API gateway for connecting third-party tools 
 ## Current Application State
 
 - Public UI: professional homepage at `/`, public documentation at `/docs`, shared public header/footer, and sign-in entry at `/login`.
-- Dashboard UI: responsive tools registry, connected accounts, agents, API keys, approvals, logs, settings, mobile navigation, and the Tassistant help widget.
+- Dashboard UI: responsive tools registry, connected accounts, agents, API keys, approvals, logs, settings, mobile navigation, and the Tassistant help widget. Tassistant works with any OpenAI-compatible endpoint — its Base URL, model, and API key are configured per user in **Settings** (default `https://openrouter.ai/api/v1`). It can also point at this app's own Rotate-tool bases (`/api/openrouter/v1`, `/api/gemini/v1`) using an `mcp_live_` agent key.
 - Dashboard data surfaces now use workspace state for overview statistics, health summaries, recent gateway activity, connected tool coverage, API key counts, and audit logs instead of static demo panels.
 - Gateway API:
   - `POST /api/gateway/execute` runs an allowed feature key through a connected account.

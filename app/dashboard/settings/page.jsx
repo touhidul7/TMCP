@@ -20,6 +20,9 @@ export default function SettingsPage() {
   const workspaceName = workspaceNameDraft ?? activeWorkspaceName;
   // OpenRouter key for Tassistant Chatbot — stored encrypted server-side, never in the browser.
   const [openrouterKey, setOpenrouterKey] = useState("");
+  // Endpoint config: any OpenAI-compatible base URL + model (non-secret).
+  const [baseUrl, setBaseUrl] = useState("https://openrouter.ai/api/v1");
+  const [model, setModel] = useState("nvidia/nemotron-3-super-120b-a12b:free");
   const [keyConfigured, setKeyConfigured] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -34,7 +37,11 @@ export default function SettingsPage() {
       try {
         const res = await fetch("/api/assistant/key", { headers: await getAuthHeaders() });
         const data = await res.json();
-        if (active && data.success) setKeyConfigured(Boolean(data.configured));
+        if (active && data.success) {
+          setKeyConfigured(Boolean(data.configured));
+          if (data.baseUrl) setBaseUrl(data.baseUrl);
+          if (data.model) setModel(data.model);
+        }
       } catch {
         // Non-fatal: treat as not configured if we cannot reach the server.
       }
@@ -55,12 +62,14 @@ export default function SettingsPage() {
       const res = await fetch("/api/assistant/key", {
         method: "POST",
         headers: await getAuthHeaders(),
-        body: JSON.stringify({ openrouterKey: openrouterKey.trim() })
+        body: JSON.stringify({ openrouterKey: openrouterKey.trim(), baseUrl: baseUrl.trim(), model: model.trim() })
       });
       const data = await res.json();
       if (data.success) {
         setKeyConfigured(true);
         setOpenrouterKey("");
+        if (data.baseUrl) setBaseUrl(data.baseUrl);
+        if (data.model) setModel(data.model);
         setSaveStatus("Saved securely on the server.");
         // Tell the floating widget the key state changed.
         window.dispatchEvent(new Event("tmcp_openrouter_key_changed"));
@@ -88,7 +97,7 @@ export default function SettingsPage() {
       const res = await fetch("/api/assistant/verify", {
         method: "POST",
         headers: await getAuthHeaders(),
-        body: JSON.stringify({ openrouterKey: openrouterKey.trim() })
+        body: JSON.stringify({ openrouterKey: openrouterKey.trim(), baseUrl: baseUrl.trim(), model: model.trim() })
       });
       const data = await res.json();
       if (data.success) {
@@ -203,8 +212,33 @@ export default function SettingsPage() {
 
           <form onSubmit={handleSaveOpenRouterKey} className="space-y-4">
             <p className="text-xs text-on-surface-variant leading-relaxed">
-              Tassistant is a floating virtual assistant that resides globally on your dashboard to answer questions and troubleshoot agent connection issues. To activate it, enter your OpenRouter API Key. The key is encrypted and stored on the server — it is never kept in your browser.
+              Tassistant is a floating virtual assistant that resides globally on your dashboard to answer questions and troubleshoot agent connection issues. It works with any OpenAI-compatible endpoint — OpenRouter (default), your own TMCP <span className="font-mono">OpenRouter Rotate</span> / <span className="font-mono">Gemini Rotate</span> tools, DeepSeek, Gemini, and more. Set the Base URL and model below, then enter the matching API key. The key is encrypted and stored on the server — it is never kept in your browser.
             </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Base URL</label>
+                <input
+                  type="text"
+                  value={baseUrl}
+                  onChange={(e) => setBaseUrl(e.target.value)}
+                  className="w-full bg-surface-container-lowest border border-outline-variant rounded px-3 py-2 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                  placeholder="https://openrouter.ai/api/v1"
+                />
+                <p className="text-[9px] text-on-surface-variant mt-1">OpenAI-compatible base. e.g. <span className="font-mono">https://openrouter.ai/api/v1</span> or your Rotate tool <span className="font-mono">/api/openrouter/v1</span>.</p>
+              </div>
+              <div>
+                <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Model</label>
+                <input
+                  type="text"
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  className="w-full bg-surface-container-lowest border border-outline-variant rounded px-3 py-2 text-xs text-on-surface focus:border-primary outline-none font-mono"
+                  placeholder="nvidia/nemotron-3-super-120b-a12b:free"
+                />
+                <p className="text-[9px] text-on-surface-variant mt-1">Model id for the chosen endpoint. e.g. <span className="font-mono">openai/gpt-4o-mini</span>, <span className="font-mono">deepseek/deepseek-chat</span>.</p>
+              </div>
+            </div>
 
             {keyConfigured && (
               <div className="flex items-center justify-between gap-2 bg-surface-container-lowest p-3 rounded border border-green-500/20 text-xs">
@@ -225,8 +259,9 @@ export default function SettingsPage() {
               </div>
             )}
 
-            <div className="flex gap-2">
-              <div className="relative flex-1">
+            <div>
+              <label className="block text-[9px] font-semibold text-on-surface-variant uppercase font-mono mb-1">API Key</label>
+              <div className="relative">
                 <input
                   type={showKey ? "text" : "password"}
                   value={openrouterKey}
@@ -242,26 +277,6 @@ export default function SettingsPage() {
                   {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-
-              <button
-                type="submit"
-                disabled={saving}
-                className="px-4 py-2 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary flex items-center gap-1.5 disabled:opacity-50"
-              >
-                {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                Save Key
-              </button>
-
-              <button
-                type="button"
-                onClick={handleVerifyOpenRouterKey}
-                disabled={verifying}
-                className="px-4 py-2 border border-outline bg-surface-container-low hover:bg-surface-container-highest transition-colors rounded text-xs text-on-surface font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                {verifying && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                {!verifying && verifySuccess && <Check className="w-3.5 h-3.5 text-green-400" />}
-                Verify API Key
-              </button>
             </div>
 
             {saveStatus && (
@@ -281,6 +296,28 @@ export default function SettingsPage() {
                 Failed: {verifyError}
               </p>
             )}
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-outline-variant/30">
+              <button
+                type="button"
+                onClick={handleVerifyOpenRouterKey}
+                disabled={verifying}
+                className="px-4 py-2 border border-outline bg-surface-container-low hover:bg-surface-container-highest transition-colors rounded text-xs text-on-surface font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {verifying && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {!verifying && verifySuccess && <Check className="w-3.5 h-3.5 text-green-400" />}
+                Verify API Key
+              </button>
+
+              <button
+                type="submit"
+                disabled={saving}
+                className="px-4 py-2 bg-primary text-on-primary font-bold text-xs rounded hover:brightness-110 active:scale-95 transition-all cursor-pointer glow-primary flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Save Assistant Settings
+              </button>
+            </div>
           </form>
         </div>
 
