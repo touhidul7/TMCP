@@ -5,7 +5,7 @@ create table if not exists provider_key_pool (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid references workspaces(id) on delete cascade,
   tool_account_id uuid references tool_accounts(id) on delete cascade,
-  provider text not null,                 -- 'gemini' | 'openrouter'
+  provider text not null,                 -- 'gemini' | 'openrouter' | 'scrapedo'
   label text,
   encrypted_key text not null,            -- AES-256-GCM sealed provider key
   key_hint text,                          -- last few chars for display, e.g. '…a1b2'

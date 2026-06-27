@@ -5,7 +5,7 @@ import Link from "next/link";
 import GatewayCodeTabs from "@/components/gateway-code-tabs";
 import { ProductSignal, PublicFooter, PublicHeader } from "@/components/public-shell";
 import { useMockStore } from "@/lib/mock-store";
-import { GATEWAY_ENDPOINTS, ROTATE_ENDPOINTS, buildGatewaySnippets, buildGetSnippets, buildRotateSnippets, getGatewaySchemas } from "@/lib/docs/gateway-docs";
+import { GATEWAY_ENDPOINTS, ROTATE_ENDPOINTS, buildGatewaySnippets, buildGetSnippets, buildRotateSnippets, buildScrapeDoRotateSnippets, getGatewaySchemas } from "@/lib/docs/gateway-docs";
 import { BookOpen, Check, Copy, FileJson, KeyRound, Lock, Network, ShieldCheck, Terminal } from "lucide-react";
 
 const DOC_SECTIONS = [
@@ -225,9 +225,9 @@ export default function PublicDocumentationPage() {
         <section id="rotate" className="mx-auto max-w-7xl scroll-mt-28 px-5 pb-10 lg:px-8">
           <div className="overflow-hidden rounded border border-outline-variant bg-surface-container">
             <div className="border-b border-outline-variant bg-surface-container-lowest px-6 py-4">
-              <h2 className="text-sm font-bold text-on-surface">OpenAI-Compatible API Key Rotation</h2>
+              <h2 className="text-sm font-bold text-on-surface">API Key Rotation</h2>
               <p className="mt-0.5 text-[10px] font-mono uppercase tracking-wider text-on-surface-variant">
-                Gemini API Rotate &amp; OpenRouter API Rotate
+                Gemini &amp; OpenRouter (OpenAI-compatible) · Scrape.do (proxy)
               </p>
             </div>
             <div className="space-y-8 p-6">
@@ -275,6 +275,28 @@ export default function PublicDocumentationPage() {
                 Prefer a single endpoint? <code className="font-mono text-on-surface">{baseUrl}/api/v1</code> also works and
                 auto-selects the provider from the model name (<code className="font-mono text-on-surface">gemini*</code> &rarr; Gemini, otherwise OpenRouter).
               </p>
+
+              {/* Scrape.do is a query-param proxy API, not OpenAI-compatible — it has its own block. */}
+              <div className="space-y-3 border-t border-outline-variant/40 pt-6">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-on-surface">Scrape.do API Rotate</h3>
+                    <p className="mt-0.5 text-[10px] font-mono uppercase tracking-wider text-on-surface-variant">Scrape.do-compatible proxy</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant">Base URL</span>
+                    <code className="rounded border border-outline-variant/50 bg-surface-container-low px-2 py-1 text-[11px] font-bold text-primary">{baseUrl}/api/scrapedo</code>
+                  </div>
+                </div>
+                <p className="max-w-3xl text-xs leading-relaxed text-on-surface-variant">
+                  Connect a <span className="font-semibold text-on-surface">Scrape.do API Rotate</span> tool and add multiple
+                  Scrape.do tokens to its pool. Send the exact same request you would send to{" "}
+                  <code className="font-mono text-on-surface">https://api.scrape.do/</code> — just swap the base URL and pass a TMCP
+                  agent API key as the <code className="font-mono text-on-surface">token</code> query parameter. TMCP injects a real
+                  token from the pool and fails over to the next on <code className="font-mono text-on-surface">429</code>/credit errors.
+                </p>
+                <GatewayCodeTabs snippets={buildScrapeDoRotateSnippets({ baseUrl, basePath: "/api/scrapedo" })} />
+              </div>
             </div>
           </div>
         </section>

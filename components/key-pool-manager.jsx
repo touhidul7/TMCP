@@ -6,7 +6,8 @@ import { KeyRound, Plus, Trash2, Loader2, ShieldCheck, AlertTriangle, RefreshCw,
 
 const ROTATE_BASE_PATHS = {
   "gemini-rotate": "/api/gemini/v1",
-  "openrouter-rotate": "/api/openrouter/v1"
+  "openrouter-rotate": "/api/openrouter/v1",
+  "scrapedo-rotate": "/api/scrapedo"
 };
 
 async function authHeaders() {
@@ -31,6 +32,7 @@ export default function KeyPoolManager({ toolAccountId, providerLabel, toolSlug 
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
 
+  const isScrapeDo = toolSlug === "scrapedo-rotate";
   const basePath = ROTATE_BASE_PATHS[toolSlug] || "/api/v1";
   const baseUrl = typeof window !== "undefined" ? `${window.location.origin}${basePath}` : basePath;
 
@@ -127,9 +129,9 @@ export default function KeyPoolManager({ toolAccountId, providerLabel, toolSlug 
         </button>
       </div>
 
-      {/* Dedicated OpenAI-compatible base URL for this pool */}
+      {/* Dedicated base URL for this pool */}
       <div className="rounded border border-primary/20 bg-primary/5 p-2.5 space-y-1">
-        <p className="text-[9px] font-bold uppercase font-mono tracking-wider text-on-surface-variant">OpenAI-Compatible Base URL</p>
+        <p className="text-[9px] font-bold uppercase font-mono tracking-wider text-on-surface-variant">{isScrapeDo ? "Scrape.do-Compatible Base URL" : "OpenAI-Compatible Base URL"}</p>
         <div className="flex items-center gap-2">
           <code className="flex-1 truncate text-[11px] font-bold text-primary font-mono">{baseUrl}</code>
           <button onClick={copyBaseUrl} className="shrink-0 flex items-center gap-1 px-2 py-1 bg-surface-container border border-outline-variant rounded text-[9px] font-bold text-on-surface hover:bg-surface-container-high cursor-pointer">
@@ -137,7 +139,11 @@ export default function KeyPoolManager({ toolAccountId, providerLabel, toolSlug 
             {copied ? "Copied" : "Copy"}
           </button>
         </div>
-        <p className="text-[9px] text-on-surface-variant">Use this as the base URL in any OpenAI-compatible app, with a TMCP agent API key as the bearer token.</p>
+        <p className="text-[9px] text-on-surface-variant">
+          {isScrapeDo
+            ? "Use this in place of https://api.scrape.do/ — pass a TMCP agent API key as the token query parameter."
+            : "Use this as the base URL in any OpenAI-compatible app, with a TMCP agent API key as the bearer token."}
+        </p>
       </div>
 
       {loading ? (
