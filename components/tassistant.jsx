@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Bot, X, Send, CornerDownLeft, Sparkles, MessageSquare, AlertCircle, Key, Trash2 } from "lucide-react";
 import { useMockStore } from "@/lib/mock-store";
 import { supabase } from "@/lib/supabase/client";
-import { GATEWAY_ENDPOINTS, getExampleInput, getGatewaySchemas } from "@/lib/docs/gateway-docs";
+import { GATEWAY_ENDPOINTS, getExampleInput, getGatewaySchemas, isRotateSlug, ROTATE_TOOL_META } from "@/lib/docs/gateway-docs";
 
 async function getAuthHeaders() {
   const { data: { session } } = await supabase.auth.getSession();
@@ -531,6 +531,12 @@ function buildAssistantContext({
 
   const toolSummaries = tools.map((tool) => {
     const accounts = toolAccounts.filter((account) => account.tool_id === tool.id);
+    // Rotate tools are called via their own dedicated base URL, NOT /api/gateway/execute, so the
+    // generic per-feature execute example_input would be misleading. Strip it and tag the tool.
+    const rotateMeta = isRotateSlug(tool.slug) ? ROTATE_TOOL_META[tool.slug] : null;
+    const toolFeatures = (toolFeatureMap[tool.id] || []).slice(0, 12).map((feature) =>
+      rotateMeta ? { ...feature, example_input: undefined } : feature
+    );
     return {
       id: tool.id,
       name: tool.name,
@@ -544,7 +550,14 @@ function buildAssistantContext({
       connected_account_count: accounts.length,
       connected_account_labels: accounts.map((account) => account.label),
       feature_count: (toolFeatureMap[tool.id] || []).length,
-      features: (toolFeatureMap[tool.id] || []).slice(0, 12)
+      features: toolFeatures,
+      ...(rotateMeta ? {
+        invocation: "dedicated_base_url",
+        base_path: rotateMeta.basePath,
+        usage_note: rotateMeta.kind === "scrapedo"
+          ? "Scrape.do-compatible proxy. Do NOT use /api/gateway/execute. Call {origin}/api/scrapedo with the TMCP agent key as the 'token' query parameter; 'url' is required, other Scrape.do params are forwarded."
+          : "OpenAI-compatible. Do NOT use /api/gateway/execute. Set {origin}" + rotateMeta.basePath + " as the base URL and use the TMCP agent key as the bearer token."
+      } : {})
     };
   });
 

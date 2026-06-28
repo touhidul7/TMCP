@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { validateAgentApiKey } from "@/lib/auth/api-key-auth";
 import { checkAgentToolPermission } from "@/lib/permissions/check-agent-tool-permission";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { GATEWAY_ENDPOINTS, buildExecutePayload, buildGatewaySnippets, getGatewaySchemas } from "@/lib/docs/gateway-docs";
+import { GATEWAY_ENDPOINTS, buildExecutePayload, buildGatewaySnippets, getGatewaySchemas, isRotateSlug, buildRotateToolDoc } from "@/lib/docs/gateway-docs";
 
 function getBaseUrl(request) {
   const url = new URL(request.url);
@@ -49,6 +49,13 @@ export async function GET(request) {
 
       if (featError) throw featError;
 
+      // Rotate tools (e.g. scrapedo-rotate, openrouter-rotate) are NOT called via
+      // /api/gateway/execute — they have their own dedicated base URL. Surface the correct
+      // invocation so agents don't try to POST a feature payload to the gateway.
+      const rotateDoc = isRotateSlug(account.tools.slug)
+        ? buildRotateToolDoc({ baseUrl, slug: account.tools.slug })
+        : null;
+
       const allowedFeatures = [];
       for (const feature of features || []) {
         const perm = await checkAgentToolPermission({
@@ -66,11 +73,13 @@ export async function GET(request) {
           is_dangerous: feature.is_dangerous,
           requires_approval: perm.requiresApproval || feature.requires_approval,
           daily_limit: perm.dailyLimit,
-          example_request: buildExecutePayload({
-            toolSlug: account.tools.slug,
-            featureKey: feature.feature_key,
-            accountId: account.id
-          })
+          example_request: rotateDoc
+            ? rotateDoc.example_request
+            : buildExecutePayload({
+                toolSlug: account.tools.slug,
+                featureKey: feature.feature_key,
+                accountId: account.id
+              })
         });
       }
 
@@ -88,12 +97,23 @@ export async function GET(request) {
           account_email: account.account_email
         },
         features: allowedFeatures,
-        examples: buildGatewaySnippets({
-          baseUrl,
-          toolSlug: account.tools.slug,
-          featureKey: firstFeature,
-          accountId: account.id
-        })
+        // For rotate tools, advertise the dedicated base URL + usage note instead of the
+        // /api/gateway/execute shape, and provide matching code snippets.
+        ...(rotateDoc
+          ? {
+              invocation: rotateDoc.invocation,
+              base_url: rotateDoc.base_url,
+              usage_note: rotateDoc.usage_note,
+              examples: rotateDoc.examples
+            }
+          : {
+              examples: buildGatewaySnippets({
+                baseUrl,
+                toolSlug: account.tools.slug,
+                featureKey: firstFeature,
+                accountId: account.id
+              })
+            })
       });
     }
 
