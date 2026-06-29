@@ -6,7 +6,7 @@ import { useMockStore } from "@/lib/mock-store";
 import DashboardHeader from "@/components/dashboard-header";
 import GatewayCodeTabs from "@/components/gateway-code-tabs";
 import KeyPoolManager from "@/components/key-pool-manager";
-import { buildRotateSnippets, buildScrapeDoRotateSnippets } from "@/lib/docs/gateway-docs";
+import { buildRotateSnippets, buildScrapeDoRotateSnippets, buildApifyRotateSnippets } from "@/lib/docs/gateway-docs";
 import { ArrowLeft, Puzzle, ExternalLink, Unplug, Pencil, X, Check, ChevronDown, ChevronUp, Trash2, BookOpen } from "lucide-react";
 
 export default function ToolDetailPage({ params }) {
@@ -125,8 +125,9 @@ export default function ToolDetailPage({ params }) {
   const isCustomMcp  = tool.tool_type === "custom_mcp";
   const isBuiltIn    = tool.tool_type === "built_in";
   const isScrapeDoRotate = tool.slug === "scrapedo-rotate";
-  const isRotateTool = tool.slug === "gemini-rotate" || tool.slug === "openrouter-rotate" || isScrapeDoRotate;
-  const rotateBasePath = tool.slug === "gemini-rotate" ? "/api/gemini/v1" : isScrapeDoRotate ? "/api/scrapedo" : "/api/openrouter/v1";
+  const isApifyRotate = tool.slug === "apify-rotate";
+  const isRotateTool = tool.slug === "gemini-rotate" || tool.slug === "openrouter-rotate" || isScrapeDoRotate || isApifyRotate;
+  const rotateBasePath = tool.slug === "gemini-rotate" ? "/api/gemini/v1" : isScrapeDoRotate ? "/api/scrapedo" : isApifyRotate ? "/api/apify/v2" : "/api/openrouter/v1";
   const rotateModel = tool.slug === "gemini-rotate" ? "gemini-2.5-flash" : "openai/gpt-4o-mini";
 
   // Initialize edit form when opening
@@ -321,7 +322,7 @@ export default function ToolDetailPage({ params }) {
     } else if (tool.slug === "scrapedo") {
       credentials = { key: accountKey };
       resolvedEmail = "scrapedo-connected";
-    } else if (["gemini-rotate", "openrouter-rotate", "scrapedo-rotate"].includes(tool.slug)) {
+    } else if (["gemini-rotate", "openrouter-rotate", "scrapedo-rotate", "apify-rotate"].includes(tool.slug)) {
       // Rotate tools hold a pool of keys (added separately), so the account itself stores no single key.
       credentials = {};
       resolvedEmail = `${tool.slug}-pool`;
@@ -943,6 +944,13 @@ export default function ToolDetailPage({ params }) {
                         Scrape.do-compatible base URL (<code className="font-mono text-on-surface">/api/scrapedo</code>)
                         — use it in place of <code className="font-mono text-on-surface">https://api.scrape.do/</code> with a TMCP agent key as the
                         <code className="font-mono text-on-surface"> token</code>, and TMCP rotates across the pool with automatic failover.
+                      </p>
+                    ) : isApifyRotate ? (
+                      <p className="text-[10px] text-on-surface-variant leading-relaxed">
+                        Create the pool first, then add multiple Apify API tokens to it below. This tool gets its own dedicated
+                        Apify-compatible base URL (<code className="font-mono text-on-surface">/api/apify/v2</code>)
+                        — use it in place of <code className="font-mono text-on-surface">https://api.apify.com/v2</code> with a TMCP agent key as the bearer
+                        token. Any Apify endpoint/actor works unchanged, and TMCP rotates across the pool with automatic failover.
                       </p>
                     ) : (
                       <p className="text-[10px] text-on-surface-variant leading-relaxed">
@@ -1780,6 +1788,12 @@ export default function ToolDetailPage({ params }) {
                         as the <code className="font-mono text-on-surface">token</code> query parameter. Required params:
                         <code className="font-mono text-on-surface"> token</code>, <code className="font-mono text-on-surface">url</code>.
                       </p>
+                    ) : isApifyRotate ? (
+                      <p className="text-[10px] text-on-surface-variant leading-relaxed">
+                        Use this in place of <code className="font-mono text-on-surface">https://api.apify.com/v2</code> — keep the same
+                        endpoint path, method, query, and body, but use a TMCP agent API key (<code className="font-mono text-on-surface">mcp_live_…</code>)
+                        as the bearer token (or <code className="font-mono text-on-surface">token</code> query param). Any Apify endpoint/actor works unchanged.
+                      </p>
                     ) : (
                       <p className="text-[10px] text-on-surface-variant leading-relaxed">
                         Set this as the base URL in any OpenAI-compatible app and use a TMCP agent API key
@@ -1792,10 +1806,14 @@ export default function ToolDetailPage({ params }) {
                   </div>
                   <GatewayCodeTabs compact snippets={isScrapeDoRotate
                     ? buildScrapeDoRotateSnippets({ baseUrl, basePath: rotateBasePath })
+                    : isApifyRotate
+                    ? buildApifyRotateSnippets({ baseUrl, basePath: rotateBasePath })
                     : buildRotateSnippets({ baseUrl, basePath: rotateBasePath, model: rotateModel })} />
                   <p className="text-[10px] text-on-surface-variant leading-relaxed">
                     {isScrapeDoRotate
                       ? "Add your Scrape.do tokens to the pool above. TMCP rotates them automatically and fails over on rate-limit/credit errors."
+                      : isApifyRotate
+                      ? "Add your Apify tokens to the pool above. TMCP rotates them automatically and fails over on auth/quota/rate-limit errors."
                       : "Add your provider keys to the pool above. TMCP rotates them automatically and fails over on rate-limit/quota errors."}
                   </p>
                 </div>

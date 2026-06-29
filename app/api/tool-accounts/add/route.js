@@ -83,7 +83,9 @@ const TOOL_META = {
   "gemini-rotate":     { name: "Gemini API Rotate",     provider: "Google",     category: "AI/LLM", desc: "Store multiple Gemini API keys and call them through one TMCP key with automatic rotation and failover.", url: "https://ai.google.dev" },
   "openrouter-rotate": { name: "OpenRouter API Rotate", provider: "OpenRouter", category: "AI/LLM", desc: "Store multiple OpenRouter API keys and call them through one TMCP key with automatic rotation and failover.", url: "https://openrouter.ai" },
   // API key rotation (Scrape.do-compatible proxy gateway)
-  "scrapedo-rotate":   { name: "Scrape.do API Rotate",  provider: "Scrape.do",  category: "Enrichment", desc: "Store multiple Scrape.do API tokens and call them through one TMCP key with automatic rotation and failover.", url: "https://scrape.do" }
+  "scrapedo-rotate":   { name: "Scrape.do API Rotate",  provider: "Scrape.do",  category: "Enrichment", desc: "Store multiple Scrape.do API tokens and call them through one TMCP key with automatic rotation and failover.", url: "https://scrape.do" },
+  // API key rotation (Apify-compatible proxy gateway)
+  "apify-rotate":      { name: "Apify API Rotate",      provider: "Apify",      category: "Enrichment", desc: "Store multiple Apify API tokens and call any Apify endpoint through one TMCP key with automatic rotation and failover.", url: "https://apify.com" }
 };
 
 const featureMap = {
@@ -289,6 +291,9 @@ const featureMap = {
   ],
   "scrapedo-rotate": [
     { feature_key: "scrapedo_rotate.scrape", name: "Scrape Web Page", description: "Scrape.do-compatible /api/scrapedo proxy routed across the Scrape.do token pool", is_dangerous: false, requires_approval: false }
+  ],
+  "apify-rotate": [
+    { feature_key: "apify_rotate.proxy", name: "Apify API Proxy", description: "Apify-compatible /api/apify/v2 transparent proxy (any endpoint/actor) routed across the Apify token pool", is_dangerous: false, requires_approval: false }
   ]
 };
 
@@ -331,7 +336,7 @@ const EXECUTABLE_BUILT_IN_SLUGS = new Set([
 
 // Rotate tools are not executed through /api/gateway/execute; they are consumed via the
 // OpenAI-compatible /api/v1/* endpoints and manage a pool of keys instead of one credential.
-const ROTATE_TOOL_SLUGS = new Set(["gemini-rotate", "openrouter-rotate", "scrapedo-rotate"]);
+const ROTATE_TOOL_SLUGS = new Set(["gemini-rotate", "openrouter-rotate", "scrapedo-rotate", "apify-rotate"]);
 
 function isConnectableBuiltin(slug) {
   return EXECUTABLE_BUILT_IN_SLUGS.has(slug) || ROTATE_TOOL_SLUGS.has(slug);

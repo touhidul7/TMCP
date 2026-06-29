@@ -5,7 +5,7 @@ import Link from "next/link";
 import GatewayCodeTabs from "@/components/gateway-code-tabs";
 import { ProductSignal, PublicFooter, PublicHeader } from "@/components/public-shell";
 import { useMockStore } from "@/lib/mock-store";
-import { GATEWAY_ENDPOINTS, ROTATE_ENDPOINTS, buildGatewaySnippets, buildGetSnippets, buildRotateSnippets, buildScrapeDoRotateSnippets, getGatewaySchemas } from "@/lib/docs/gateway-docs";
+import { GATEWAY_ENDPOINTS, ROTATE_ENDPOINTS, buildGatewaySnippets, buildGetSnippets, buildRotateSnippets, buildScrapeDoRotateSnippets, buildApifyRotateSnippets, getGatewaySchemas } from "@/lib/docs/gateway-docs";
 import { BookOpen, Check, Copy, FileJson, KeyRound, Lock, Network, ShieldCheck, Terminal } from "lucide-react";
 
 const DOC_SECTIONS = [
@@ -227,7 +227,7 @@ export default function PublicDocumentationPage() {
             <div className="border-b border-outline-variant bg-surface-container-lowest px-6 py-4">
               <h2 className="text-sm font-bold text-on-surface">API Key Rotation</h2>
               <p className="mt-0.5 text-[10px] font-mono uppercase tracking-wider text-on-surface-variant">
-                Gemini &amp; OpenRouter (OpenAI-compatible) · Scrape.do (proxy)
+                Gemini &amp; OpenRouter (OpenAI-compatible) · Scrape.do &amp; Apify (proxy)
               </p>
             </div>
             <div className="space-y-8 p-6">
@@ -296,6 +296,30 @@ export default function PublicDocumentationPage() {
                   token from the pool and fails over to the next on <code className="font-mono text-on-surface">429</code>/credit errors.
                 </p>
                 <GatewayCodeTabs snippets={buildScrapeDoRotateSnippets({ baseUrl, basePath: "/api/scrapedo" })} />
+              </div>
+
+              {/* Apify is a full REST API — TMCP proxies every endpoint transparently. */}
+              <div className="space-y-3 border-t border-outline-variant/40 pt-6">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-on-surface">Apify API Rotate</h3>
+                    <p className="mt-0.5 text-[10px] font-mono uppercase tracking-wider text-on-surface-variant">Apify-compatible transparent proxy</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] font-mono uppercase tracking-wider text-on-surface-variant">Base URL</span>
+                    <code className="rounded border border-outline-variant/50 bg-surface-container-low px-2 py-1 text-[11px] font-bold text-primary">{baseUrl}/api/apify/v2</code>
+                  </div>
+                </div>
+                <p className="max-w-3xl text-xs leading-relaxed text-on-surface-variant">
+                  Connect an <span className="font-semibold text-on-surface">Apify API Rotate</span> tool and add multiple
+                  Apify tokens to its pool. Send the exact same request you would send to{" "}
+                  <code className="font-mono text-on-surface">https://api.apify.com/v2</code> — same path, method, query, and body —
+                  just swap the base URL and use a TMCP agent API key in place of your Apify token (bearer header or{" "}
+                  <code className="font-mono text-on-surface">token</code> query param). Any endpoint and any actor works without
+                  custom code. TMCP injects a real token from the pool and fails over to the next on{" "}
+                  <code className="font-mono text-on-surface">401</code>/<code className="font-mono text-on-surface">402</code>/<code className="font-mono text-on-surface">403</code>/<code className="font-mono text-on-surface">429</code> errors.
+                </p>
+                <GatewayCodeTabs snippets={buildApifyRotateSnippets({ baseUrl, basePath: "/api/apify/v2" })} />
               </div>
             </div>
           </div>
