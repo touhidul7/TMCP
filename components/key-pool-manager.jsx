@@ -8,7 +8,8 @@ const ROTATE_BASE_PATHS = {
   "gemini-rotate": "/api/gemini/v1",
   "openrouter-rotate": "/api/openrouter/v1",
   "scrapedo-rotate": "/api/scrapedo",
-  "apify-rotate": "/api/apify/v2"
+  "apify-rotate": "/api/apify/v2",
+  "serper-rotate": "/api/serper"
 };
 
 async function authHeaders() {
@@ -35,6 +36,7 @@ export default function KeyPoolManager({ toolAccountId, providerLabel, toolSlug 
 
   const isScrapeDo = toolSlug === "scrapedo-rotate";
   const isApify = toolSlug === "apify-rotate";
+  const isSerper = toolSlug === "serper-rotate";
   const basePath = ROTATE_BASE_PATHS[toolSlug] || "/api/v1";
   const baseUrl = typeof window !== "undefined" ? `${window.location.origin}${basePath}` : basePath;
 
@@ -133,7 +135,7 @@ export default function KeyPoolManager({ toolAccountId, providerLabel, toolSlug 
 
       {/* Dedicated base URL for this pool */}
       <div className="rounded border border-primary/20 bg-primary/5 p-2.5 space-y-1">
-        <p className="text-[9px] font-bold uppercase font-mono tracking-wider text-on-surface-variant">{isScrapeDo ? "Scrape.do-Compatible Base URL" : isApify ? "Apify-Compatible Base URL" : "OpenAI-Compatible Base URL"}</p>
+        <p className="text-[9px] font-bold uppercase font-mono tracking-wider text-on-surface-variant">{isScrapeDo ? "Scrape.do-Compatible Base URL" : isApify ? "Apify-Compatible Base URL" : isSerper ? "Serper-Compatible Base URL" : "OpenAI-Compatible Base URL"}</p>
         <div className="flex items-center gap-2">
           <code className="flex-1 truncate text-[11px] font-bold text-primary font-mono">{baseUrl}</code>
           <button onClick={copyBaseUrl} className="shrink-0 flex items-center gap-1 px-2 py-1 bg-surface-container border border-outline-variant rounded text-[9px] font-bold text-on-surface hover:bg-surface-container-high cursor-pointer">
@@ -146,6 +148,8 @@ export default function KeyPoolManager({ toolAccountId, providerLabel, toolSlug 
             ? "Use this in place of https://api.scrape.do/ — pass a TMCP agent API key as the token query parameter."
             : isApify
             ? "Use this in place of https://api.apify.com/v2 — any Apify endpoint/method works, with a TMCP agent API key as the bearer token."
+            : isSerper
+            ? "Use this in place of https://google.serper.dev (Search API). For the Scrape API, use {base}/api/serper/scrape in place of https://scrape.serper.dev. Both share this one key pool; pass a TMCP agent API key in the X-API-KEY header."
             : "Use this as the base URL in any OpenAI-compatible app, with a TMCP agent API key as the bearer token."}
         </p>
       </div>

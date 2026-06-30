@@ -85,7 +85,9 @@ const TOOL_META = {
   // API key rotation (Scrape.do-compatible proxy gateway)
   "scrapedo-rotate":   { name: "Scrape.do API Rotate",  provider: "Scrape.do",  category: "Enrichment", desc: "Store multiple Scrape.do API tokens and call them through one TMCP key with automatic rotation and failover.", url: "https://scrape.do" },
   // API key rotation (Apify-compatible proxy gateway)
-  "apify-rotate":      { name: "Apify API Rotate",      provider: "Apify",      category: "Enrichment", desc: "Store multiple Apify API tokens and call any Apify endpoint through one TMCP key with automatic rotation and failover.", url: "https://apify.com" }
+  "apify-rotate":      { name: "Apify API Rotate",      provider: "Apify",      category: "Enrichment", desc: "Store multiple Apify API tokens and call any Apify endpoint through one TMCP key with automatic rotation and failover.", url: "https://apify.com" },
+  // API key rotation (Serper-compatible proxy gateway)
+  "serper-rotate":     { name: "Serper API Rotate",     provider: "Serper",     category: "Enrichment", desc: "Store multiple Serper API keys and call any Serper endpoint through one TMCP key with automatic rotation and failover.", url: "https://serper.dev" }
 };
 
 const featureMap = {
@@ -294,6 +296,9 @@ const featureMap = {
   ],
   "apify-rotate": [
     { feature_key: "apify_rotate.proxy", name: "Apify API Proxy", description: "Apify-compatible /api/apify/v2 transparent proxy (any endpoint/actor) routed across the Apify token pool", is_dangerous: false, requires_approval: false }
+  ],
+  "serper-rotate": [
+    { feature_key: "serper_rotate.proxy", name: "Serper API Proxy", description: "Serper-compatible /api/serper transparent proxy (any endpoint) routed across the Serper key pool", is_dangerous: false, requires_approval: false }
   ]
 };
 
@@ -336,7 +341,7 @@ const EXECUTABLE_BUILT_IN_SLUGS = new Set([
 
 // Rotate tools are not executed through /api/gateway/execute; they are consumed via the
 // OpenAI-compatible /api/v1/* endpoints and manage a pool of keys instead of one credential.
-const ROTATE_TOOL_SLUGS = new Set(["gemini-rotate", "openrouter-rotate", "scrapedo-rotate", "apify-rotate"]);
+const ROTATE_TOOL_SLUGS = new Set(["gemini-rotate", "openrouter-rotate", "scrapedo-rotate", "apify-rotate", "serper-rotate"]);
 
 function isConnectableBuiltin(slug) {
   return EXECUTABLE_BUILT_IN_SLUGS.has(slug) || ROTATE_TOOL_SLUGS.has(slug);

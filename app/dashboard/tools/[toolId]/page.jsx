@@ -6,7 +6,7 @@ import { useMockStore } from "@/lib/mock-store";
 import DashboardHeader from "@/components/dashboard-header";
 import GatewayCodeTabs from "@/components/gateway-code-tabs";
 import KeyPoolManager from "@/components/key-pool-manager";
-import { buildRotateSnippets, buildScrapeDoRotateSnippets, buildApifyRotateSnippets } from "@/lib/docs/gateway-docs";
+import { buildRotateSnippets, buildScrapeDoRotateSnippets, buildApifyRotateSnippets, buildSerperRotateSnippets } from "@/lib/docs/gateway-docs";
 import { ArrowLeft, Puzzle, ExternalLink, Unplug, Pencil, X, Check, ChevronDown, ChevronUp, Trash2, BookOpen } from "lucide-react";
 import Image from "next/image";
 
@@ -127,8 +127,9 @@ export default function ToolDetailPage({ params }) {
   const isBuiltIn    = tool.tool_type === "built_in";
   const isScrapeDoRotate = tool.slug === "scrapedo-rotate";
   const isApifyRotate = tool.slug === "apify-rotate";
-  const isRotateTool = tool.slug === "gemini-rotate" || tool.slug === "openrouter-rotate" || isScrapeDoRotate || isApifyRotate;
-  const rotateBasePath = tool.slug === "gemini-rotate" ? "/api/gemini/v1" : isScrapeDoRotate ? "/api/scrapedo" : isApifyRotate ? "/api/apify/v2" : "/api/openrouter/v1";
+  const isSerperRotate = tool.slug === "serper-rotate";
+  const isRotateTool = tool.slug === "gemini-rotate" || tool.slug === "openrouter-rotate" || isScrapeDoRotate || isApifyRotate || isSerperRotate;
+  const rotateBasePath = tool.slug === "gemini-rotate" ? "/api/gemini/v1" : isScrapeDoRotate ? "/api/scrapedo" : isApifyRotate ? "/api/apify/v2" : isSerperRotate ? "/api/serper" : "/api/openrouter/v1";
   const rotateModel = tool.slug === "gemini-rotate" ? "gemini-2.5-flash" : "openai/gpt-4o-mini";
 
   // Initialize edit form when opening
@@ -323,7 +324,7 @@ export default function ToolDetailPage({ params }) {
     } else if (tool.slug === "scrapedo") {
       credentials = { key: accountKey };
       resolvedEmail = "scrapedo-connected";
-    } else if (["gemini-rotate", "openrouter-rotate", "scrapedo-rotate", "apify-rotate"].includes(tool.slug)) {
+    } else if (["gemini-rotate", "openrouter-rotate", "scrapedo-rotate", "apify-rotate", "serper-rotate"].includes(tool.slug)) {
       // Rotate tools hold a pool of keys (added separately), so the account itself stores no single key.
       credentials = {};
       resolvedEmail = `${tool.slug}-pool`;
@@ -952,6 +953,15 @@ export default function ToolDetailPage({ params }) {
                         Apify-compatible base URL (<code className="font-mono text-on-surface">/api/apify/v2</code>)
                         — use it in place of <code className="font-mono text-on-surface">https://api.apify.com/v2</code> with a TMCP agent key as the bearer
                         token. Any Apify endpoint/actor works unchanged, and TMCP rotates across the pool with automatic failover.
+                      </p>
+                    ) : isSerperRotate ? (
+                      <p className="text-[10px] text-on-surface-variant leading-relaxed">
+                        Create the pool first, then add multiple Serper API keys to it below. One pool serves both Serper products:
+                        the <span className="font-semibold">Search API</span> at <code className="font-mono text-on-surface">/api/serper</code>
+                        (in place of <code className="font-mono text-on-surface">https://google.serper.dev</code>) and the
+                        <span className="font-semibold"> Scrape API</span> at <code className="font-mono text-on-surface">/api/serper/scrape</code>
+                        (in place of <code className="font-mono text-on-surface">https://scrape.serper.dev</code>). Pass a TMCP agent key in the
+                        <code className="font-mono text-on-surface"> X-API-KEY</code> header, and TMCP rotates across the pool with automatic failover.
                       </p>
                     ) : (
                       <p className="text-[10px] text-on-surface-variant leading-relaxed">
@@ -1795,6 +1805,14 @@ export default function ToolDetailPage({ params }) {
                         endpoint path, method, query, and body, but use a TMCP agent API key (<code className="font-mono text-on-surface">mcp_live_…</code>)
                         as the bearer token (or <code className="font-mono text-on-surface">token</code> query param). Any Apify endpoint/actor works unchanged.
                       </p>
+                    ) : isSerperRotate ? (
+                      <p className="text-[10px] text-on-surface-variant leading-relaxed">
+                        Search API: use this in place of <code className="font-mono text-on-surface">https://google.serper.dev</code>.
+                        Scrape API: use <code className="font-mono text-on-surface">{baseUrl}/api/serper/scrape</code> in place of
+                        <code className="font-mono text-on-surface"> https://scrape.serper.dev</code>. Keep the same path, method, query, and body,
+                        but put a TMCP agent API key (<code className="font-mono text-on-surface">mcp_live_…</code>) in the
+                        <code className="font-mono text-on-surface"> X-API-KEY</code> header. Both share one key pool.
+                      </p>
                     ) : (
                       <p className="text-[10px] text-on-surface-variant leading-relaxed">
                         Set this as the base URL in any OpenAI-compatible app and use a TMCP agent API key
@@ -1809,12 +1827,16 @@ export default function ToolDetailPage({ params }) {
                     ? buildScrapeDoRotateSnippets({ baseUrl, basePath: rotateBasePath })
                     : isApifyRotate
                     ? buildApifyRotateSnippets({ baseUrl, basePath: rotateBasePath })
+                    : isSerperRotate
+                    ? buildSerperRotateSnippets({ baseUrl, basePath: rotateBasePath })
                     : buildRotateSnippets({ baseUrl, basePath: rotateBasePath, model: rotateModel })} />
                   <p className="text-[10px] text-on-surface-variant leading-relaxed">
                     {isScrapeDoRotate
                       ? "Add your Scrape.do tokens to the pool above. TMCP rotates them automatically and fails over on rate-limit/credit errors."
                       : isApifyRotate
                       ? "Add your Apify tokens to the pool above. TMCP rotates them automatically and fails over on auth/quota/rate-limit errors."
+                      : isSerperRotate
+                      ? "Add your Serper keys to the pool above. TMCP rotates them automatically and fails over on auth/quota/rate-limit errors."
                       : "Add your provider keys to the pool above. TMCP rotates them automatically and fails over on rate-limit/quota errors."}
                   </p>
                 </div>
