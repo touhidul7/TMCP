@@ -1893,7 +1893,7 @@ export default function ToolDetailPage({ params }) {
       {showConfirmDelete && (
         <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
           <div className="bg-surface-container border border-error/25 rounded-lg max-w-md w-full p-6 space-y-4 shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-error to-error/50" />
+            <div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-error to-error/50" />
             
             <div className="flex items-center gap-3 text-error">
               <div className="w-10 h-10 rounded-full bg-error/10 flex items-center justify-center border border-error/25">
