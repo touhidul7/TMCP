@@ -8,6 +8,7 @@ import GatewayCodeTabs from "@/components/gateway-code-tabs";
 import KeyPoolManager from "@/components/key-pool-manager";
 import { buildRotateSnippets, buildScrapeDoRotateSnippets, buildApifyRotateSnippets } from "@/lib/docs/gateway-docs";
 import { ArrowLeft, Puzzle, ExternalLink, Unplug, Pencil, X, Check, ChevronDown, ChevronUp, Trash2, BookOpen } from "lucide-react";
+import Image from "next/image";
 
 export default function ToolDetailPage({ params }) {
   const router = useRouter();
@@ -419,7 +420,7 @@ export default function ToolDetailPage({ params }) {
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 bg-surface-container-high rounded flex items-center justify-center border border-outline-variant text-primary font-bold">
                     {tool.official_website_url ? (
-                      <img 
+                      <Image 
                         src={`https://www.google.com/s2/favicons?sz=64&domain=${tool.official_website_url}`}
                         alt={tool.name}
                         className="w-8 h-8 object-contain"
