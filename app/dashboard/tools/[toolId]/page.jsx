@@ -1806,6 +1806,9 @@ export default function ToolDetailPage({ params }) {
                         as the bearer token (or <code className="font-mono text-on-surface">token</code> query param). Any Apify endpoint/actor works unchanged.
                       </p>
                     ) : isSerperRotate ? (
+                      <>
+                      Search Base URL:<code className="block truncate text-[12px] font-bold text-primary font-mono">{baseUrl}/api/serper</code>
+                      Scrape Base URL:<code className="block truncate text-[12px] font-bold text-primary font-mono">{baseUrl}/api/serper/scrape</code>
                       <p className="text-[10px] text-on-surface-variant leading-relaxed">
                         Search API: use this in place of <code className="font-mono text-on-surface">https://google.serper.dev</code>.
                         Scrape API: use <code className="font-mono text-on-surface">{baseUrl}/api/serper/scrape</code> in place of
@@ -1813,6 +1816,7 @@ export default function ToolDetailPage({ params }) {
                         but put a TMCP agent API key (<code className="font-mono text-on-surface">mcp_live_…</code>) in the
                         <code className="font-mono text-on-surface"> X-API-KEY</code> header. Both share one key pool.
                       </p>
+                      </>
                     ) : (
                       <p className="text-[10px] text-on-surface-variant leading-relaxed">
                         Set this as the base URL in any OpenAI-compatible app and use a TMCP agent API key
