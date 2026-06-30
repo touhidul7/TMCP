@@ -318,6 +318,7 @@ export default function PublicDocumentationPage() {
                   <code className="font-mono text-on-surface">token</code> query param). Any endpoint and any actor works without
                   custom code. TMCP injects a real token from the pool and fails over to the next on{" "}
                   <code className="font-mono text-on-surface">401</code>/<code className="font-mono text-on-surface">402</code>/<code className="font-mono text-on-surface">403</code>/<code className="font-mono text-on-surface">429</code> errors.
+                  Successful responses stream straight through, so large dataset and run-sync downloads pass through without buffering.
                 </p>
                 <GatewayCodeTabs snippets={buildApifyRotateSnippets({ baseUrl, basePath: "/api/apify/v2" })} />
               </div>
