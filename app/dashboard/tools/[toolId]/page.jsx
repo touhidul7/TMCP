@@ -1807,8 +1807,14 @@ export default function ToolDetailPage({ params }) {
                       </p>
                     ) : isSerperRotate ? (
                       <>
-                      Search Base URL:<code className="block truncate text-[12px] font-bold text-primary font-mono">{baseUrl}/api/serper</code>
-                      Scrape Base URL:<code className="block truncate text-[12px] font-bold text-primary font-mono">{baseUrl}/api/serper/scrape</code>
+                      <p className="text-[9px] font-bold uppercase font-mono tracking-wider text-on-surface-variant">
+                      Search Base URL:
+                      </p>
+                      <code className="block truncate text-[12px] font-bold text-primary font-mono">{baseUrl}/api/serper</code>
+                      <p className="text-[9px] font-bold uppercase font-mono tracking-wider text-on-surface-variant">
+                      Scrape Base URL:
+                      </p>
+                      <code className="block truncate text-[12px] font-bold text-primary font-mono">{baseUrl}/api/serper/scrape</code>
                       <p className="text-[10px] text-on-surface-variant leading-relaxed">
                         Search API: use this in place of <code className="font-mono text-on-surface">https://google.serper.dev</code>.
                         Scrape API: use <code className="font-mono text-on-surface">{baseUrl}/api/serper/scrape</code> in place of
