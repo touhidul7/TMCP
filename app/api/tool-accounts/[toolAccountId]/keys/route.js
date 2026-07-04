@@ -15,7 +15,7 @@ function statusFor(message) {
 async function resolveRotateAccount(user, toolAccountId) {
   const { data: account, error } = await supabaseAdmin
     .from("tool_accounts")
-    .select("id, workspace_id, tools ( slug )")
+    .select("id, workspace_id, tools ( slug, tool_type )")
     .eq("id", toolAccountId)
     .maybeSingle();
 
@@ -23,7 +23,9 @@ async function resolveRotateAccount(user, toolAccountId) {
   if (account.workspace_id !== user.workspace_id) {
     throw new Error("Forbidden: This tool account belongs to a different workspace");
   }
-  const provider = ROTATE_SLUG_TO_PROVIDER[account.tools?.slug];
+  // Built-in rotate tools map slug -> provider; user-defined rotators use their slug directly.
+  const provider = ROTATE_SLUG_TO_PROVIDER[account.tools?.slug]
+    || (account.tools?.tool_type === "custom_rotate" ? account.tools.slug : null);
   if (!provider) throw new Error("This tool does not support API key rotation");
   return { account, provider };
 }

@@ -12,6 +12,7 @@ const DOC_SECTIONS = [
   { id: "getting-started", label: "Getting Started" },
   { id: "endpoints", label: "Endpoints" },
   { id: "authentication", label: "Authentication" },
+  { id: "mcp", label: "MCP Server" },
   { id: "discovery", label: "Discovery & Status" },
   { id: "examples", label: "Execute Examples" },
   { id: "schemas", label: "Schemas" },
@@ -167,6 +168,49 @@ export default function PublicDocumentationPage() {
             <Link href="/login" className="mt-4 inline-flex text-xs font-bold text-primary hover:underline">
               Sign in to create keys
             </Link>
+          </div>
+        </section>
+
+        <section id="mcp" className="mx-auto max-w-7xl scroll-mt-28 px-5 pb-10 lg:px-8">
+          <div className="overflow-hidden rounded border border-outline-variant bg-surface-container">
+            <div className="border-b border-outline-variant bg-surface-container-lowest px-6 py-4">
+              <h2 className="text-sm font-bold text-on-surface">MCP Server (Model Context Protocol)</h2>
+              <p className="mt-0.5 text-[10px] font-mono uppercase tracking-wider text-on-surface-variant">
+                Connect Claude Desktop, Claude Code, Cursor, or any MCP client directly to your TMCP workspace
+              </p>
+            </div>
+            <div className="grid gap-6 p-6 lg:grid-cols-2">
+              <div className="space-y-3 text-xs leading-relaxed text-on-surface-variant">
+                <p>
+                  <code className="font-mono text-primary">{baseUrl}/api/mcp</code> is a spec-compliant MCP server over the
+                  Streamable HTTP transport. Authenticate with an agent API key in the{" "}
+                  <code className="font-mono text-on-surface">Authorization: Bearer</code> header. Every feature the agent is
+                  allowed to use appears as an MCP tool (for example <code className="font-mono text-on-surface">gmail__send</code>{" "}
+                  for <code className="font-mono text-on-surface">gmail.send</code>), with input schemas from the tool registry.
+                </p>
+                <p>
+                  Approval-gated tools return a pending <code className="font-mono text-on-surface">approval_id</code> instead of
+                  a result; the client can poll{" "}
+                  <code className="font-mono text-on-surface">GET /api/gateway/approvals/&#123;id&#125;</code> to retrieve the
+                  outcome after an administrator approves it in the dashboard. Supported methods:{" "}
+                  <code className="font-mono text-on-surface">initialize</code>,{" "}
+                  <code className="font-mono text-on-surface">ping</code>,{" "}
+                  <code className="font-mono text-on-surface">tools/list</code>,{" "}
+                  <code className="font-mono text-on-surface">tools/call</code>.
+                </p>
+              </div>
+              <div>
+                <p className="mb-2 text-[10px] font-mono uppercase tracking-wider text-on-surface-variant">Add to Claude Code</p>
+                <pre className="overflow-x-auto rounded border border-outline-variant bg-surface-container-lowest p-3 text-[10px] leading-relaxed text-on-surface"><code>{`claude mcp add --transport http tmcp \\
+  ${baseUrl}/api/mcp \\
+  --header "Authorization: Bearer mcp_live_YOUR_KEY"`}</code></pre>
+                <p className="mb-2 mt-4 text-[10px] font-mono uppercase tracking-wider text-on-surface-variant">Raw JSON-RPC example</p>
+                <pre className="overflow-x-auto rounded border border-outline-variant bg-surface-container-lowest p-3 text-[10px] leading-relaxed text-on-surface"><code>{`curl -X POST ${baseUrl}/api/mcp \\
+  -H "Authorization: Bearer mcp_live_YOUR_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'`}</code></pre>
+              </div>
+            </div>
           </div>
         </section>
 

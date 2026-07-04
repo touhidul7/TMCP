@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { validateAgentApiKey } from "@/lib/auth/api-key-auth";
-import { checkAgentToolPermission, countDailyUsage } from "@/lib/permissions/check-agent-tool-permission";
-import { logToolCall } from "@/lib/logs/log-tool-call";
+import { runGatewayCall } from "@/lib/gateway/run-gateway-call";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-const { runTool } = require("@/lib/tools/router");
 
 export async function POST(request) {
   const startTime = performance.now();
@@ -19,7 +17,7 @@ export async function POST(request) {
     );
   }
 
-  const { workspaceId, agentId, apiKeyId, agentName } = agentContext;
+  const { workspaceId, agentId, apiKeyId } = agentContext;
 
   try {
     reqBody = await request.json();
@@ -43,50 +41,21 @@ export async function POST(request) {
   }
 
   try {
-    // 1+2. Resolve the target account. An explicit account id fetches exactly one row; the
-    // tool-name form fetches the workspace's connected accounts and matches slug/name
-    // case-insensitively (that matching can't be pushed into SQL safely).
-    const accountColumns = `
-      id,
-      label,
-      tool_id,
-      connection_metadata,
-      tools (
-        id,
-        name,
-        slug,
-        tool_type,
-        is_enabled,
-        mcp_server_url,
-        rest_base_url,
-        mcp_config,
-        rest_config
-      )
-    `;
+    // Resolve the target account. An explicit account id is used as-is; the tool-name form
+    // fetches the workspace's connected accounts and matches slug/name case-insensitively
+    // (that matching can't be pushed into SQL safely).
+    let resolvedAccountId = requestedAccountId || null;
 
-    let selectedAccount = null;
-    if (requestedAccountId) {
-      const { data: account, error: accError } = await supabaseAdmin
-        .from("tool_accounts")
-        .select(accountColumns)
-        .eq("workspace_id", workspaceId)
-        .eq("status", "connected")
-        .eq("id", requestedAccountId)
-        .maybeSingle();
-
-      // 22P02 = malformed uuid — the same "not found" outcome as an unknown id, not a server error.
-      if (accError && accError.code !== "22P02") throw accError;
-      selectedAccount = account || null;
-    } else if (tool) {
+    if (!resolvedAccountId && tool) {
       const { data: accounts, error: accError } = await supabaseAdmin
         .from("tool_accounts")
-        .select(accountColumns)
+        .select("id, label, tools ( slug, name )")
         .eq("workspace_id", workspaceId)
         .eq("status", "connected");
 
       if (accError) throw accError;
 
-      const matchingAccounts = accounts.filter(a => {
+      const matchingAccounts = (accounts || []).filter(a => {
         const slug = a.tools?.slug || "";
         const name = a.tools?.name || "";
         return slug.toLowerCase() === tool.toLowerCase() || name.toLowerCase() === tool.toLowerCase();
@@ -107,177 +76,62 @@ export async function POST(request) {
         );
       }
 
-      selectedAccount = matchingAccounts[0] || null;
+      resolvedAccountId = matchingAccounts[0]?.id || null;
     }
 
-    if (!selectedAccount) {
+    if (!resolvedAccountId) {
       return NextResponse.json(
-        { success: false, error: requestedAccountId ? `Connected account not found or not accessible: ${requestedAccountId}` : `No connected account found for tool: ${tool || 'unknown'}` },
+        { success: false, error: `No connected account found for tool: ${tool || 'unknown'}` },
         { status: 404 }
       );
     }
 
-    const toolRecord = selectedAccount.tools;
-    const resolvedAccountId = selectedAccount.id;
-
-    if (!toolRecord || !toolRecord.is_enabled) {
-      return NextResponse.json(
-        { success: false, error: "Associated tool is disabled" },
-        { status: 400 }
-      );
-    }
-
-    // 3+4+6. Permission check, rate-limit count, and credentials load are independent — run them
-    // in one parallel round trip instead of three sequential ones.
-    const [permCheck, dailyUsed, credsResult] = await Promise.all([
-      checkAgentToolPermission({
-        agentId,
-        toolAccountId: resolvedAccountId,
-        featureKey: action
-      }),
-      countDailyUsage({ agentId, apiKeyId, featureKey: action }),
-      supabaseAdmin
-        .from("tool_account_credentials")
-        .select(
-          "encrypted_access_token, encrypted_refresh_token, encrypted_api_key, encrypted_client_secret," +
-          "encrypted_private_key, encrypted_private_key_passphrase, encrypted_password, encrypted_sudo_password"
-        )
-        .eq("tool_account_id", resolvedAccountId)
-        .maybeSingle()
-    ]);
-
-    if (!permCheck.allowed) {
-      const latencyMs = Math.round(performance.now() - startTime);
-      await logToolCall({
-        workspaceId,
-        agentId,
-        apiKeyId,
-        toolId: toolRecord.id,
-        toolAccountId: resolvedAccountId,
-        toolName: toolRecord.name,
-        featureKey: action,
-        input,
-        status: "DENIED",
-        error: permCheck.reason || "Permission Denied",
-        latencyMs
-      });
-
-      return NextResponse.json(
-        { success: false, error: permCheck.reason || "Permission Denied" },
-        { status: 403 }
-      );
-    }
-
-    // Daily rate limit (null count = counting failed; fail safe and allow).
-    const limitOk = dailyUsed === null || dailyUsed < permCheck.dailyLimit;
-
-    if (!limitOk) {
-      const latencyMs = Math.round(performance.now() - startTime);
-      const limitErr = `Rate limit exceeded: Daily cap of ${permCheck.dailyLimit} reached.`;
-      await logToolCall({
-        workspaceId,
-        agentId,
-        apiKeyId,
-        toolId: toolRecord.id,
-        toolAccountId: resolvedAccountId,
-        toolName: toolRecord.name,
-        featureKey: action,
-        input,
-        status: "DENIED",
-        error: limitErr,
-        latencyMs
-      });
-
-      return NextResponse.json(
-        { success: false, error: limitErr },
-        { status: 429 }
-      );
-    }
-
-    // 5. Check manual approval requirement
-    if (permCheck.requiresApproval) {
-      const { data: approval, error: apprError } = await supabaseAdmin
-        .from("tool_approvals")
-        .insert({
-          workspace_id: workspaceId,
-          agent_id: agentId,
-          api_key_id: apiKeyId,
-          tool_id: toolRecord.id,
-          tool_account_id: resolvedAccountId,
-          feature_key: action,
-          input,
-          status: "pending"
-        })
-        .select("id")
-        .single();
-
-      if (apprError) throw apprError;
-
-      const latencyMs = Math.round(performance.now() - startTime);
-      await logToolCall({
-        workspaceId,
-        agentId,
-        apiKeyId,
-        toolId: toolRecord.id,
-        toolAccountId: resolvedAccountId,
-        toolName: toolRecord.name,
-        featureKey: action,
-        input,
-        status: "PENDING_APPROVAL",
-        error: "Action queued. Awaiting administrator approval.",
-        latencyMs
-      });
-
-      return NextResponse.json({
-        success: false,
-        status: "pending",
-        approval_id: approval.id,
-        message: "Action queued. Dangerous tool call requires approval."
-      });
-    }
-
-    // Credentials were loaded in parallel above.
-    if (credsResult.error) throw credsResult.error;
-    const creds = credsResult.data;
-
-    // Attach non-sensitive connection metadata so tool handlers (e.g. SSH) can read host/port/username
-    toolRecord._connectionMetadata = selectedAccount.connection_metadata || {};
-
-    // 7. Run tool router
-    const data = await runTool({
-      tool: toolRecord,
-      featureKey: action,
-      input,
-      credentialRecord: creds
-    });
-
-    const latencyMs = Math.round(performance.now() - startTime);
-
-    // 8. Log successful call
-    await logToolCall({
+    // Shared gateway pipeline: permission matrix, daily rate limit, approval gate, execution,
+    // and audit logging (same code path as the MCP server's tools/call).
+    const outcome = await runGatewayCall({
       workspaceId,
       agentId,
       apiKeyId,
-      toolId: toolRecord.id,
       toolAccountId: resolvedAccountId,
-      toolName: toolRecord.name,
       featureKey: action,
       input,
-      output: data,
-      status: "SUCCESS",
-      latencyMs
+      startTime
     });
 
-    return NextResponse.json({
-      success: true,
-      result: data,
-      latency_ms: latencyMs
-    });
-
+    switch (outcome.kind) {
+      case "success":
+        return NextResponse.json({
+          success: true,
+          result: outcome.data,
+          latency_ms: outcome.latencyMs
+        });
+      case "pending":
+        return NextResponse.json({
+          success: false,
+          status: "pending",
+          approval_id: outcome.approvalId,
+          message: "Action queued. Dangerous tool call requires approval.",
+          poll_url: `/api/gateway/approvals/${outcome.approvalId}`
+        });
+      case "denied":
+        return NextResponse.json({ success: false, error: outcome.error }, { status: 403 });
+      case "rate_limited":
+        return NextResponse.json({ success: false, error: outcome.error }, { status: 429 });
+      case "disabled":
+        return NextResponse.json({ success: false, error: outcome.error }, { status: 400 });
+      case "not_found":
+        return NextResponse.json(
+          { success: false, error: requestedAccountId ? `Connected account not found or not accessible: ${requestedAccountId}` : outcome.error },
+          { status: 404 }
+        );
+      default:
+        return NextResponse.json(
+          { success: false, error: outcome.error || "Failed to execute tool" },
+          { status: 500 }
+        );
+    }
   } catch (err) {
     console.error("Error executing gateway tool call:", err);
-    const latencyMs = Math.round(performance.now() - startTime);
-
     return NextResponse.json(
       { success: false, error: err.message || "Failed to execute tool" },
       { status: 500 }

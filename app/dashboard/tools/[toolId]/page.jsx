@@ -128,8 +128,9 @@ export default function ToolDetailPage({ params }) {
   const isScrapeDoRotate = tool.slug === "scrapedo-rotate";
   const isApifyRotate = tool.slug === "apify-rotate";
   const isSerperRotate = tool.slug === "serper-rotate";
-  const isRotateTool = tool.slug === "gemini-rotate" || tool.slug === "openrouter-rotate" || isScrapeDoRotate || isApifyRotate || isSerperRotate;
-  const rotateBasePath = tool.slug === "gemini-rotate" ? "/api/gemini/v1" : isScrapeDoRotate ? "/api/scrapedo" : isApifyRotate ? "/api/apify/v2" : isSerperRotate ? "/api/serper" : "/api/openrouter/v1";
+  const isCustomRotate = tool.tool_type === "custom_rotate";
+  const isRotateTool = tool.slug === "gemini-rotate" || tool.slug === "openrouter-rotate" || isScrapeDoRotate || isApifyRotate || isSerperRotate || isCustomRotate;
+  const rotateBasePath = isCustomRotate ? `/api/rotate/${tool.slug}` : tool.slug === "gemini-rotate" ? "/api/gemini/v1" : isScrapeDoRotate ? "/api/scrapedo" : isApifyRotate ? "/api/apify/v2" : isSerperRotate ? "/api/serper" : "/api/openrouter/v1";
   const rotateModel = tool.slug === "gemini-rotate" ? "gemini-2.5-flash" : "openai/gpt-4o-mini";
 
   // Initialize edit form when opening
@@ -324,7 +325,7 @@ export default function ToolDetailPage({ params }) {
     } else if (tool.slug === "scrapedo") {
       credentials = { key: accountKey };
       resolvedEmail = "scrapedo-connected";
-    } else if (["gemini-rotate", "openrouter-rotate", "scrapedo-rotate", "apify-rotate", "serper-rotate"].includes(tool.slug)) {
+    } else if (["gemini-rotate", "openrouter-rotate", "scrapedo-rotate", "apify-rotate", "serper-rotate"].includes(tool.slug) || tool.tool_type === "custom_rotate") {
       // Rotate tools hold a pool of keys (added separately), so the account itself stores no single key.
       credentials = {};
       resolvedEmail = `${tool.slug}-pool`;
@@ -423,6 +424,8 @@ export default function ToolDetailPage({ params }) {
                     {tool.official_website_url ? (
                       <Image 
                         src={`https://www.google.com/s2/favicons?sz=64&domain=${tool.official_website_url}`}
+                        width={32}
+                        height={32}
                         alt={tool.name}
                         className="w-8 h-8 object-contain"
                         onError={(e) => { e.target.style.display = "none"; }}
@@ -962,6 +965,13 @@ export default function ToolDetailPage({ params }) {
                         <span className="font-semibold"> Scrape API</span> at <code className="font-mono text-on-surface">/api/serper/scrape</code>
                         (in place of <code className="font-mono text-on-surface">https://scrape.serper.dev</code>). Pass a TMCP agent key in the
                         <code className="font-mono text-on-surface"> X-API-KEY</code> header, and TMCP rotates across the pool with automatic failover.
+                      </p>
+                    ) : isCustomRotate ? (
+                      <p className="text-[10px] text-on-surface-variant leading-relaxed">
+                        Create the pool first, then add multiple upstream API keys to it below. This rotator gets its own dedicated
+                        transparent base URL (<code className="font-mono text-on-surface">{rotateBasePath}</code>)
+                        — use it in place of <code className="font-mono text-on-surface">{tool.rest_base_url || "the upstream base URL"}</code> with a TMCP agent key
+                        (Bearer, <code className="font-mono text-on-surface">X-API-KEY</code>, or <code className="font-mono text-on-surface">?token=</code>), and TMCP rotates across the pool with automatic failover.
                       </p>
                     ) : (
                       <p className="text-[10px] text-on-surface-variant leading-relaxed">

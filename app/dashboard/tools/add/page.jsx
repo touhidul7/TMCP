@@ -51,6 +51,12 @@ export default function AddToolPage() {
 }`);
 
   // Test states
+  // Custom rotating proxy (custom_rotate) config
+  const [rotateBaseUrl, setRotateBaseUrl] = useState("");
+  const [rotateAuthType, setRotateAuthType] = useState("bearer"); // bearer, header, query
+  const [rotateAuthName, setRotateAuthName] = useState("X-API-KEY");
+  const [rotateStatusCodes, setRotateStatusCodes] = useState("401, 402, 403, 429");
+
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null); // null, success, error
 
@@ -110,6 +116,24 @@ export default function AddToolPage() {
         },
         features: parsedFeatures
       };
+    } else if (toolType === "custom_rotate") {
+      if (!rotateBaseUrl) {
+        alert("Upstream base URL is required for a rotating proxy");
+        return;
+      }
+      const statuses = rotateStatusCodes
+        .split(",")
+        .map((s) => parseInt(s.trim(), 10))
+        .filter((n) => Number.isFinite(n) && n >= 400 && n <= 599);
+
+      toolData.rest_base_url = rotateBaseUrl.replace(/\/$/, "");
+      toolData.rest_config = {
+        rotate: {
+          auth_type: rotateAuthType,
+          auth_name: rotateAuthType === "bearer" ? "Authorization" : rotateAuthName,
+          rotate_status_codes: statuses.length ? statuses : [401, 402, 403, 429]
+        }
+      };
     } else {
       let parsedHeaders = {};
       let parsedSchema = {};
@@ -166,7 +190,7 @@ export default function AddToolPage() {
         </div>
 
         {/* Tab Selection */}
-        <div className="grid grid-cols-2 gap-1 p-1 bg-surface-container-low border border-outline-variant rounded">
+        <div className="grid grid-cols-3 gap-1 p-1 bg-surface-container-low border border-outline-variant rounded">
           <button
             onClick={() => setToolType("custom_mcp")}
             className={`py-2 text-xs font-semibold uppercase font-mono rounded cursor-pointer transition-all ${
@@ -186,6 +210,16 @@ export default function AddToolPage() {
             }`}
           >
             Custom REST API
+          </button>
+          <button
+            onClick={() => setToolType("custom_rotate")}
+            className={`py-2 text-xs font-semibold uppercase font-mono rounded cursor-pointer transition-all ${
+              toolType === "custom_rotate"
+                ? "bg-primary text-on-primary font-bold"
+                : "text-on-surface-variant hover:text-on-surface"
+            }`}
+          >
+            Rotating Proxy
           </button>
         </div>
 
@@ -323,6 +357,70 @@ export default function AddToolPage() {
           )}
 
           {/* Custom REST Specific Form */}
+          {toolType === "custom_rotate" && (
+            <div className="space-y-4">
+              <h3 className="text-sm font-bold text-on-surface pb-2 border-b border-outline-variant/30">Rotating Proxy Configuration</h3>
+              <p className="text-[11px] text-on-surface-variant">
+                TMCP exposes a transparent proxy at <code className="font-mono">/api/rotate/&#123;slug&#125;</code>. Requests keep their
+                path, query, and body; TMCP injects a real key from this tool&apos;s rotation pool and fails over to the
+                next key on the statuses below. Add pool keys from the tool page after connecting an account.
+              </p>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Upstream Base URL</label>
+                <input
+                  type="url"
+                  required
+                  value={rotateBaseUrl}
+                  onChange={(e) => setRotateBaseUrl(e.target.value)}
+                  className="w-full bg-surface-container-lowest border border-outline-variant rounded px-3 py-2 text-xs text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none font-mono"
+                  placeholder="https://api.example.com/v1"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Key Injection</label>
+                  <select
+                    value={rotateAuthType}
+                    onChange={(e) => setRotateAuthType(e.target.value)}
+                    className="w-full bg-surface-container-lowest border border-outline-variant rounded px-3 py-2 text-xs text-on-surface focus:border-primary outline-none"
+                  >
+                    <option value="bearer">Authorization: Bearer &lt;key&gt;</option>
+                    <option value="header">Custom header</option>
+                    <option value="query">Query parameter</option>
+                  </select>
+                </div>
+                {rotateAuthType !== "bearer" && (
+                  <div>
+                    <label className="block text-[10px] font-semibold text-on-surface-variant uppercase font-mono mb-1">
+                      {rotateAuthType === "query" ? "Query Parameter Name" : "Header Name"}
+                    </label>
+                    <input
+                      type="text"
+                      value={rotateAuthName}
+                      onChange={(e) => setRotateAuthName(e.target.value)}
+                      className="w-full bg-surface-container-lowest border border-outline-variant rounded px-3 py-2 text-xs text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none font-mono"
+                      placeholder={rotateAuthType === "query" ? "api_key" : "X-API-KEY"}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Failover Status Codes</label>
+                <input
+                  type="text"
+                  value={rotateStatusCodes}
+                  onChange={(e) => setRotateStatusCodes(e.target.value)}
+                  className="w-full bg-surface-container-lowest border border-outline-variant rounded px-3 py-2 text-xs text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none font-mono"
+                  placeholder="401, 402, 403, 429"
+                />
+                <p className="text-[10px] text-on-surface-variant mt-1">Comma-separated HTTP statuses that rotate to the next pool key (4xx/5xx only).</p>
+              </div>
+            </div>
+          )}
+
           {toolType === "custom_rest" && (
             <div className="space-y-4 pt-4 border-t border-outline-variant/30">
               <h3 className="text-sm font-bold text-on-surface pb-2 border-b border-outline-variant/30 font-mono">REST API Parameters</h3>

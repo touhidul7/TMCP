@@ -8,6 +8,16 @@ const nextConfig = {
   ],
   // ssh2 uses native Node.js crypto — must not be bundled by Turbopack
   serverExternalPackages: ["ssh2"],
+
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "www.google.com",
+        pathname: "/s2/**",
+      },
+    ],
+  },
 };
 
 export default nextConfig;

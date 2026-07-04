@@ -1,17 +1,32 @@
 import { NextResponse } from "next/server";
 import { validateAgentApiKey } from "@/lib/auth/api-key-auth";
-import { checkAgentToolPermission, countDailyUsage } from "@/lib/permissions/check-agent-tool-permission";
-import { logToolCall } from "@/lib/logs/log-tool-call";
-import { supabaseAdmin } from "@/lib/supabase/admin";
-const { runTool } = require("@/lib/tools/router");
+import { runGatewayCall } from "@/lib/gateway/run-gateway-call";
+import {
+  listAgentMcpTools,
+  handleInitialize,
+  toolCallResultFromOutcome,
+  rpcResult,
+  rpcError,
+  RPC_ERRORS
+} from "@/lib/mcp/protocol";
+
+// TMCP's MCP server endpoint (Streamable HTTP transport, stateless).
+//
+//   • JSON-RPC 2.0 bodies speak real MCP: initialize, notifications/initialized, ping,
+//     tools/list, and tools/call — so Claude Desktop/Code, Cursor, and any other MCP client can
+//     connect with just this URL and an `Authorization: Bearer mcp_live_...` header.
+//   • Bodies without a `jsonrpc` field keep the original TMCP action format
+//     ({ action: "tools.list" | "tools.call", ... }) for existing integrations.
+//
+// The server returns JSON responses (never SSE) and issues no session id, both of which the
+// Streamable HTTP spec allows. GET/DELETE are 405 since there are no server-initiated streams
+// and no sessions to delete.
 
 export async function POST(request) {
   const startTime = performance.now();
-  let agentContext = null;
-  let reqBody = null;
-  
+
+  let agentContext;
   try {
-    // 1. Authenticate the Agent
     agentContext = await validateAgentApiKey(request);
   } catch (error) {
     return NextResponse.json(
@@ -20,352 +35,213 @@ export async function POST(request) {
     );
   }
 
-  const { workspaceId, agentId, apiKeyId, agentName } = agentContext;
-
+  let reqBody;
   try {
     reqBody = await request.json();
-  } catch (e) {
+  } catch {
     return NextResponse.json(
-      { success: false, error: "Invalid JSON body" },
+      rpcError(null, RPC_ERRORS.PARSE_ERROR, "Invalid JSON body"),
       { status: 400 }
     );
   }
 
-  // Support both JSON-RPC 2.0 (method/params) and action-based format
-  let action, tool_account_id, feature_key, input = {}, jsonrpcId;
-
-  if (reqBody.jsonrpc === '2.0') {
-    // JSON-RPC 2.0 — map method to action
-    jsonrpcId = reqBody.id;
-    const params = reqBody.params || {};
-    if (reqBody.method === 'tools/list') {
-      action = 'tools.list';
-    } else if (reqBody.method === 'tools/call') {
-      action = 'tools.call';
-      tool_account_id = params.tool_account_id || params.account_id;
-      feature_key = params.feature_key || params.name;
-      input = params.input || params.arguments || {};
-    } else {
-      const rpcErr = { jsonrpc: '2.0', id: reqBody.id, error: { code: -32601, message: `Method not found: ${reqBody.method}` } };
-      return NextResponse.json(rpcErr, { status: 404 });
-    }
-  } else {
-    // Legacy action-based format
-    action = reqBody.action;
-    tool_account_id = reqBody.tool_account_id || reqBody.account_id;
-    feature_key = reqBody.feature_key;
-    input = reqBody.input || {};
+  if (reqBody && reqBody.jsonrpc === "2.0") {
+    return handleMcpMessage(reqBody, agentContext, startTime);
+  }
+  if (Array.isArray(reqBody)) {
+    // JSON-RPC batching was removed in MCP 2025-06-18.
+    return NextResponse.json(
+      rpcError(null, RPC_ERRORS.INVALID_REQUEST, "Batch requests are not supported"),
+      { status: 400 }
+    );
   }
 
-  // Helper to wrap response in JSON-RPC if needed
-  const respond = (body, status = 200) => {
-    if (jsonrpcId !== undefined) {
-      if (body.success === false || body.error) {
-        return NextResponse.json({ jsonrpc: '2.0', id: jsonrpcId, error: { code: -32000, message: body.error || 'Error' } }, { status });
-      }
-      return NextResponse.json({ jsonrpc: '2.0', id: jsonrpcId, result: body }, { status });
+  return handleLegacyAction(reqBody || {}, agentContext, startTime);
+}
+
+// The spec requires 405 when the server offers no server-initiated SSE stream (GET) and no
+// session to terminate (DELETE).
+export async function GET() {
+  return new Response(null, { status: 405, headers: { Allow: "POST" } });
+}
+
+export async function DELETE() {
+  return new Response(null, { status: 405, headers: { Allow: "POST" } });
+}
+
+// ---------------------------------------------------------------------------
+// MCP (JSON-RPC 2.0)
+// ---------------------------------------------------------------------------
+
+async function handleMcpMessage(message, agentContext, startTime) {
+  const { workspaceId, agentId, apiKeyId } = agentContext;
+  const { id, method, params } = message;
+
+  // Notifications (no id) expect no body; 202 Accepted per the Streamable HTTP transport.
+  if (id === undefined || id === null) {
+    return new Response(null, { status: 202 });
+  }
+
+  try {
+    if (method === "initialize") {
+      return NextResponse.json(handleInitialize(id, params));
     }
-    return NextResponse.json(body, { status });
-  };
 
-  // -------------------------------------------------------------
-  // ACTION: tools.list
-  // -------------------------------------------------------------
-  if (action === "tools.list") {
-    try {
-      // Get all accounts connected in this workspace
-      const { data: accounts, error: accError } = await supabaseAdmin
-        .from("tool_accounts")
-        .select(`
-          id,
-          label,
-          tool_id,
-          tools (
+    if (method === "ping") {
+      return NextResponse.json(rpcResult(id, {}));
+    }
+
+    if (method === "tools/list") {
+      const entries = await listAgentMcpTools({ workspaceId, agentId });
+      return NextResponse.json(
+        rpcResult(id, {
+          tools: entries.map(({ name, description, inputSchema }) => ({
             name,
-            tool_type,
-            is_enabled
-          )
-        `)
-        .eq("workspace_id", workspaceId)
-        .eq("status", "connected");
-
-      if (accError) throw accError;
-
-      const enabledAccounts = (accounts || []).filter((a) => a.tools?.is_enabled);
-      if (enabledAccounts.length === 0) {
-        return respond({ success: true, tools: [] });
-      }
-
-      // Batch the feature and permission lookups (one query each) instead of querying per
-      // account and per feature — the old shape was O(accounts × features) round trips.
-      const toolIds = [...new Set(enabledAccounts.map((a) => a.tool_id))];
-      const accountIds = enabledAccounts.map((a) => a.id);
-
-      const [featuresRes, permsRes] = await Promise.all([
-        supabaseAdmin
-          .from("tool_features")
-          .select("tool_id, feature_key")
-          .in("tool_id", toolIds)
-          .eq("is_enabled", true),
-        supabaseAdmin
-          .from("agent_tool_permissions")
-          .select("tool_account_id, feature_key")
-          .eq("agent_id", agentId)
-          .in("tool_account_id", accountIds)
-          .eq("allowed", true)
-      ]);
-
-      if (featuresRes.error) throw featuresRes.error;
-      if (permsRes.error) throw permsRes.error;
-
-      const featuresByTool = new Map();
-      for (const feat of featuresRes.data || []) {
-        if (!featuresByTool.has(feat.tool_id)) featuresByTool.set(feat.tool_id, []);
-        featuresByTool.get(feat.tool_id).push(feat.feature_key);
-      }
-
-      const allowedByAccount = new Set(
-        (permsRes.data || []).map((p) => `${p.tool_account_id}:${p.feature_key}`)
+            description,
+            inputSchema
+          }))
+        })
       );
+    }
 
-      const toolsList = [];
-      for (const account of enabledAccounts) {
-        const features = featuresByTool.get(account.tool_id) || [];
-        const allowedFeatures = features.filter((featureKey) =>
-          allowedByAccount.has(`${account.id}:${featureKey}`)
-        );
+    if (method === "tools/call") {
+      const name = params?.name;
+      if (!name || typeof name !== "string") {
+        return NextResponse.json(rpcError(id, RPC_ERRORS.INVALID_PARAMS, "Missing tool name"));
+      }
+      const input = params?.arguments || params?.input || {};
 
-        if (allowedFeatures.length > 0) {
-          toolsList.push({
-            tool: account.tools.name,
-            account_label: account.label,
-            tool_account_id: account.id,
-            features: allowedFeatures
-          });
+      // Resolve the MCP tool name against the agent's allowed set. Raw feature keys
+      // ("gmail.send") with an explicit account id are also accepted for compatibility with
+      // the previous JSON-RPC dialect.
+      let toolAccountId;
+      let featureKey;
+      const explicitAccount = params?.tool_account_id || params?.account_id;
+      if (explicitAccount && name.includes(".")) {
+        toolAccountId = explicitAccount;
+        featureKey = params?.feature_key || name;
+      } else {
+        const entries = await listAgentMcpTools({ workspaceId, agentId });
+        const entry = entries.find((e) => e.name === name)
+          || (name.includes(".") ? entries.find((e) => e.featureKey === name) : null);
+        if (!entry) {
+          return NextResponse.json(rpcError(id, RPC_ERRORS.INVALID_PARAMS, `Unknown tool: ${name}`));
         }
+        toolAccountId = entry.toolAccountId;
+        featureKey = entry.featureKey;
       }
 
-      return respond({ success: true, tools: toolsList });
-    } catch (err) {
-      console.error("Error in tools.list:", err);
-      return respond({ success: false, error: "Failed to list tools" }, 500);
-    }
-  }
-
-  // -------------------------------------------------------------
-  // ACTION: tools.call
-  // -------------------------------------------------------------
-  if (action === "tools.call") {
-    if (!tool_account_id || !feature_key) {
-      return respond({ success: false, error: "Missing tool_account_id or feature_key parameter" }, 400);
-    }
-
-    let toolRecord = null;
-    let accountRecord = null;
-
-    try {
-      // Validate tool account ownership & load tool details
-      const { data: account, error: accError } = await supabaseAdmin
-        .from("tool_accounts")
-        .select(`
-          id,
-          label,
-          tool_id,
-          workspace_id,
-          connection_metadata,
-          tools (
-            id,
-            name,
-            tool_type,
-            is_enabled,
-            mcp_server_url,
-            rest_base_url,
-            mcp_config,
-            rest_config
-          )
-        `)
-        .eq("id", tool_account_id)
-        .eq("workspace_id", workspaceId)
-        .single();
-
-      if (accError || !account) {
-        throw new Error("Tool account not found or access denied");
-      }
-
-      accountRecord = account;
-      toolRecord = account.tools;
-
-      if (!toolRecord || !toolRecord.is_enabled) {
-        throw new Error("Associated tool is disabled");
-      }
-
-      // Permission check, rate-limit count, and credentials load are independent — run them in
-      // one parallel round trip instead of three sequential ones.
-      const [permCheck, dailyUsed, credsResult] = await Promise.all([
-        checkAgentToolPermission({
-          agentId,
-          toolAccountId: tool_account_id,
-          featureKey: feature_key
-        }),
-        countDailyUsage({ agentId, apiKeyId, featureKey: feature_key }),
-        supabaseAdmin
-          .from("tool_account_credentials")
-          .select(
-            "encrypted_access_token, encrypted_refresh_token, encrypted_api_key, encrypted_client_secret," +
-            "encrypted_private_key, encrypted_private_key_passphrase, encrypted_password, encrypted_sudo_password"
-          )
-          .eq("tool_account_id", tool_account_id)
-          .maybeSingle()
-      ]);
-
-      if (!permCheck.allowed) {
-        // Log access denied
-        const latencyMs = Math.round(performance.now() - startTime);
-        await logToolCall({
-          workspaceId,
-          agentId,
-          apiKeyId,
-          toolId: toolRecord.id,
-          toolAccountId: tool_account_id,
-          toolName: toolRecord.name,
-          featureKey: feature_key,
-          input,
-          status: "DENIED",
-          error: permCheck.reason || "Permission Denied",
-          latencyMs
-        });
-
-        return respond({ success: false, error: permCheck.reason || "Permission Denied" }, 403);
-      }
-
-      // Daily rate limit (null count = counting failed; fail safe and allow).
-      const limitOk = dailyUsed === null || dailyUsed < permCheck.dailyLimit;
-
-      if (!limitOk) {
-        const latencyMs = Math.round(performance.now() - startTime);
-        const limitErr = `Rate limit exceeded: Daily cap of ${permCheck.dailyLimit} reached.`;
-        await logToolCall({
-          workspaceId,
-          agentId,
-          apiKeyId,
-          toolId: toolRecord.id,
-          toolAccountId: tool_account_id,
-          toolName: toolRecord.name,
-          featureKey: feature_key,
-          input,
-          status: "DENIED",
-          error: limitErr,
-          latencyMs
-        });
-
-        return respond({ success: false, error: limitErr }, 429);
-      }
-
-      // Check manual approval requirement
-      if (permCheck.requiresApproval) {
-        // Create manual approval entry in DB
-        const { data: approval, error: apprError } = await supabaseAdmin
-          .from("tool_approvals")
-          .insert({
-            workspace_id: workspaceId,
-            agent_id: agentId,
-            api_key_id: apiKeyId,
-            tool_id: toolRecord.id,
-            tool_account_id: tool_account_id,
-            feature_key: feature_key,
-            input,
-            status: "pending"
-          })
-          .select("id")
-          .single();
-
-        if (apprError) throw apprError;
-
-        const latencyMs = Math.round(performance.now() - startTime);
-        await logToolCall({
-          workspaceId,
-          agentId,
-          apiKeyId,
-          toolId: toolRecord.id,
-          toolAccountId: tool_account_id,
-          toolName: toolRecord.name,
-          featureKey: feature_key,
-          input,
-          status: "PENDING_APPROVAL",
-          error: "Action queued. Awaiting administrator approval.",
-          latencyMs
-        });
-
-        return respond({
-          success: false,
-          status: "pending",
-          approval_id: approval.id,
-          message: "Action queued. Dangerous tool call requires approval."
-        });
-      }
-
-      // Credentials were loaded in parallel above.
-      if (credsResult.error) throw credsResult.error;
-      const creds = credsResult.data;
-
-      // Attach non-sensitive connection metadata so tool handlers can read host/port/username etc.
-      toolRecord._connectionMetadata = accountRecord.connection_metadata || {};
-
-      // Execute Tool Router
-      const data = await runTool({
-        tool: toolRecord,
-        featureKey: feature_key,
-        input,
-        credentialRecord: creds
-      });
-
-      const latencyMs = Math.round(performance.now() - startTime);
-
-      // Log successful call
-      await logToolCall({
+      const outcome = await runGatewayCall({
         workspaceId,
         agentId,
         apiKeyId,
-        toolId: toolRecord.id,
-        toolAccountId: tool_account_id,
-        toolName: toolRecord.name,
-        featureKey: feature_key,
+        toolAccountId,
+        featureKey,
         input,
-        output: data,
-        status: "SUCCESS",
-        latencyMs
+        startTime
       });
 
-      return respond({
-        success: true,
-        feature_key,
-        data
-      });
+      if (outcome.kind === "not_found") {
+        return NextResponse.json(rpcError(id, RPC_ERRORS.INVALID_PARAMS, outcome.error));
+      }
+      return NextResponse.json(rpcResult(id, toolCallResultFromOutcome(outcome)));
+    }
 
-    } catch (err) {
-      console.error("Error executing tool call:", err);
-      const latencyMs = Math.round(performance.now() - startTime);
+    // Optional capability listings some clients probe for even when not advertised.
+    if (method === "resources/list") {
+      return NextResponse.json(rpcResult(id, { resources: [] }));
+    }
+    if (method === "prompts/list") {
+      return NextResponse.json(rpcResult(id, { prompts: [] }));
+    }
 
-      // Log failure
-      if (toolRecord) {
-        await logToolCall({
-          workspaceId,
-          agentId,
-          apiKeyId,
-          toolId: toolRecord.id,
-          toolAccountId: tool_account_id,
-          toolName: toolRecord.name,
-          featureKey: feature_key,
-          input,
-          status: "FAILED",
-          error: err.message || "Execution Failed",
-          latencyMs
-        });
+    return NextResponse.json(rpcError(id, RPC_ERRORS.METHOD_NOT_FOUND, `Method not found: ${method}`));
+  } catch (err) {
+    console.error("MCP request failed:", err);
+    return NextResponse.json(
+      rpcError(id, RPC_ERRORS.INTERNAL_ERROR, err.message || "Internal error")
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Legacy TMCP action format (pre-MCP integrations)
+// ---------------------------------------------------------------------------
+
+async function handleLegacyAction(reqBody, agentContext, startTime) {
+  const { workspaceId, agentId, apiKeyId } = agentContext;
+  const action = reqBody.action;
+
+  if (action === "tools.list") {
+    try {
+      const entries = await listAgentMcpTools({ workspaceId, agentId });
+
+      // Preserve the original account-grouped response shape.
+      const byAccount = new Map();
+      for (const entry of entries) {
+        if (!byAccount.has(entry.toolAccountId)) {
+          byAccount.set(entry.toolAccountId, {
+            tool: entry.toolName,
+            account_label: entry.accountLabel,
+            tool_account_id: entry.toolAccountId,
+            features: []
+          });
+        }
+        byAccount.get(entry.toolAccountId).features.push(entry.featureKey);
       }
 
-      return respond({ success: false, error: err.message || "Failed to execute tool" }, 500);
+      return NextResponse.json({ success: true, tools: [...byAccount.values()] });
+    } catch (err) {
+      console.error("Error in tools.list:", err);
+      return NextResponse.json({ success: false, error: "Failed to list tools" }, { status: 500 });
     }
   }
 
-  return respond({ success: false, error: "Unsupported gateway action" }, 400);
+  if (action === "tools.call") {
+    const toolAccountId = reqBody.tool_account_id || reqBody.account_id;
+    const featureKey = reqBody.feature_key;
+    const input = reqBody.input || {};
+
+    if (!toolAccountId || !featureKey) {
+      return NextResponse.json(
+        { success: false, error: "Missing tool_account_id or feature_key parameter" },
+        { status: 400 }
+      );
+    }
+
+    const outcome = await runGatewayCall({
+      workspaceId,
+      agentId,
+      apiKeyId,
+      toolAccountId,
+      featureKey,
+      input,
+      startTime
+    });
+
+    if (outcome.kind === "success") {
+      return NextResponse.json({ success: true, feature_key: featureKey, data: outcome.data });
+    }
+    if (outcome.kind === "pending") {
+      return NextResponse.json({
+        success: false,
+        status: "pending",
+        approval_id: outcome.approvalId,
+        message: "Action queued. Dangerous tool call requires approval."
+      });
+    }
+    if (outcome.kind === "denied") {
+      return NextResponse.json({ success: false, error: outcome.error }, { status: 403 });
+    }
+    if (outcome.kind === "rate_limited") {
+      return NextResponse.json({ success: false, error: outcome.error }, { status: 429 });
+    }
+    // not_found and error both surfaced as 500 in the original implementation.
+    return NextResponse.json(
+      { success: false, error: outcome.error || "Failed to execute tool" },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({ success: false, error: "Unsupported gateway action" }, { status: 400 });
 }

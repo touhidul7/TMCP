@@ -14,6 +14,7 @@ import {
   Shield,
   History,
   FileCheck,
+  BarChart3,
   Settings,
   Plus,
   FileText,
@@ -32,6 +33,7 @@ const iconMap = {
   security: Shield,
   history_2: History,
   fact_check: FileCheck,
+  analytics: BarChart3,
   settings: Settings,
   docs: BookOpen,
 };
@@ -50,6 +52,7 @@ export default function DashboardSidebar({ mobile = false, onNavigate }) {
     { name: "Users", path: "/dashboard/users", icon: "group", perm: "users.view" },
     { name: "Roles", path: "/dashboard/roles", icon: "security", perm: "settings.view" },
     { name: "Logs", path: "/dashboard/logs", icon: "history_2", perm: "logs.view" },
+    { name: "Analytics", path: "/dashboard/analytics", icon: "analytics", perm: "logs.view" },
     { name: "Approvals", path: "/dashboard/approvals", icon: "fact_check", perm: "approvals.view" },
     { name: "Settings", path: "/dashboard/settings", icon: "settings", perm: "settings.view" },
     { name: "Documentation", path: "/docs", icon: "docs", perm: "api_keys.view" },

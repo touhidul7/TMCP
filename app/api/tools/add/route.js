@@ -10,7 +10,7 @@ const AddToolSchema = z.object({
   provider: z.string().min(1, "Provider is required"),
   description: z.string().optional(),
   category: z.string().optional(),
-  tool_type: z.enum(["built_in", "custom_mcp", "custom_rest"]),
+  tool_type: z.enum(["built_in", "custom_mcp", "custom_rest", "custom_rotate"]),
   official_website_url: z.string().optional(),
   icon_url: z.string().optional(),
   icon_source: z.string().default("manual"),
@@ -71,6 +71,18 @@ export async function POST(request) {
           requires_approval: f.requires_approval || false,
           is_enabled: true
         });
+      });
+    } else if (parsed.tool_type === "custom_rotate") {
+      // A custom rotator exposes one transparent proxy feature; requests are authorized by the
+      // agent permission matrix against this key, then served by the rotating key pool.
+      featuresToInsert.push({
+        tool_id: tool.id,
+        feature_key: `${parsed.slug}.proxy`,
+        name: `${parsed.name} Rotating Proxy`,
+        description: parsed.description || `Transparent rotating-key proxy for ${parsed.rest_base_url || parsed.name}`,
+        is_dangerous: parsed.is_dangerous || false,
+        requires_approval: false,
+        is_enabled: true
       });
     } else if (parsed.tool_type === "custom_rest") {
       // Custom REST tool represents one default feature/action
