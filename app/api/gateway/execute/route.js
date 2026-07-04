@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { validateAgentApiKey } from "@/lib/auth/api-key-auth";
-import { checkAgentToolPermission, checkRateLimit } from "@/lib/permissions/check-agent-tool-permission";
+import { checkAgentToolPermission, countDailyUsage } from "@/lib/permissions/check-agent-tool-permission";
 import { logToolCall } from "@/lib/logs/log-tool-call";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 const { runTool } = require("@/lib/tools/router");
@@ -43,36 +43,49 @@ export async function POST(request) {
   }
 
   try {
-    // 1. Fetch connected tool accounts in workspace
-    const { data: accounts, error: accError } = await supabaseAdmin
-      .from("tool_accounts")
-      .select(`
+    // 1+2. Resolve the target account. An explicit account id fetches exactly one row; the
+    // tool-name form fetches the workspace's connected accounts and matches slug/name
+    // case-insensitively (that matching can't be pushed into SQL safely).
+    const accountColumns = `
+      id,
+      label,
+      tool_id,
+      connection_metadata,
+      tools (
         id,
-        label,
-        tool_id,
-        connection_metadata,
-        tools (
-          id,
-          name,
-          slug,
-          tool_type,
-          is_enabled,
-          mcp_server_url,
-          rest_base_url,
-          mcp_config,
-          rest_config
-        )
-      `)
-      .eq("workspace_id", workspaceId)
-      .eq("status", "connected");
+        name,
+        slug,
+        tool_type,
+        is_enabled,
+        mcp_server_url,
+        rest_base_url,
+        mcp_config,
+        rest_config
+      )
+    `;
 
-    if (accError) throw accError;
-
-    // 2. Find matching account
     let selectedAccount = null;
     if (requestedAccountId) {
-      selectedAccount = accounts.find(a => a.id === requestedAccountId);
+      const { data: account, error: accError } = await supabaseAdmin
+        .from("tool_accounts")
+        .select(accountColumns)
+        .eq("workspace_id", workspaceId)
+        .eq("status", "connected")
+        .eq("id", requestedAccountId)
+        .maybeSingle();
+
+      // 22P02 = malformed uuid — the same "not found" outcome as an unknown id, not a server error.
+      if (accError && accError.code !== "22P02") throw accError;
+      selectedAccount = account || null;
     } else if (tool) {
+      const { data: accounts, error: accError } = await supabaseAdmin
+        .from("tool_accounts")
+        .select(accountColumns)
+        .eq("workspace_id", workspaceId)
+        .eq("status", "connected");
+
+      if (accError) throw accError;
+
       const matchingAccounts = accounts.filter(a => {
         const slug = a.tools?.slug || "";
         const name = a.tools?.name || "";
@@ -114,12 +127,24 @@ export async function POST(request) {
       );
     }
 
-    // 3. Check agent permission matrix
-    const permCheck = await checkAgentToolPermission({
-      agentId,
-      toolAccountId: resolvedAccountId,
-      featureKey: action
-    });
+    // 3+4+6. Permission check, rate-limit count, and credentials load are independent — run them
+    // in one parallel round trip instead of three sequential ones.
+    const [permCheck, dailyUsed, credsResult] = await Promise.all([
+      checkAgentToolPermission({
+        agentId,
+        toolAccountId: resolvedAccountId,
+        featureKey: action
+      }),
+      countDailyUsage({ agentId, apiKeyId, featureKey: action }),
+      supabaseAdmin
+        .from("tool_account_credentials")
+        .select(
+          "encrypted_access_token, encrypted_refresh_token, encrypted_api_key, encrypted_client_secret," +
+          "encrypted_private_key, encrypted_private_key_passphrase, encrypted_password, encrypted_sudo_password"
+        )
+        .eq("tool_account_id", resolvedAccountId)
+        .maybeSingle()
+    ]);
 
     if (!permCheck.allowed) {
       const latencyMs = Math.round(performance.now() - startTime);
@@ -143,13 +168,8 @@ export async function POST(request) {
       );
     }
 
-    // 4. Check daily rate limit
-    const limitOk = await checkRateLimit({
-      agentId,
-      apiKeyId,
-      featureKey: action,
-      dailyLimit: permCheck.dailyLimit
-    });
+    // Daily rate limit (null count = counting failed; fail safe and allow).
+    const limitOk = dailyUsed === null || dailyUsed < permCheck.dailyLimit;
 
     if (!limitOk) {
       const latencyMs = Math.round(performance.now() - startTime);
@@ -216,17 +236,9 @@ export async function POST(request) {
       });
     }
 
-    // 6. Load credentials
-    const { data: creds, error: credsError } = await supabaseAdmin
-      .from("tool_account_credentials")
-      .select(
-        "encrypted_access_token, encrypted_refresh_token, encrypted_api_key, encrypted_client_secret," +
-        "encrypted_private_key, encrypted_private_key_passphrase, encrypted_password, encrypted_sudo_password"
-      )
-      .eq("tool_account_id", resolvedAccountId)
-      .maybeSingle();
-
-    if (credsError) throw credsError;
+    // Credentials were loaded in parallel above.
+    if (credsResult.error) throw credsResult.error;
+    const creds = credsResult.data;
 
     // Attach non-sensitive connection metadata so tool handlers (e.g. SSH) can read host/port/username
     toolRecord._connectionMetadata = selectedAccount.connection_metadata || {};

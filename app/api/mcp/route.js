@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { validateAgentApiKey } from "@/lib/auth/api-key-auth";
-import { checkAgentToolPermission, checkRateLimit } from "@/lib/permissions/check-agent-tool-permission";
+import { checkAgentToolPermission, countDailyUsage } from "@/lib/permissions/check-agent-tool-permission";
 import { logToolCall } from "@/lib/logs/log-tool-call";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 const { runTool } = require("@/lib/tools/router");
@@ -91,32 +91,49 @@ export async function POST(request) {
 
       if (accError) throw accError;
 
-      // Filter based on permissions
-      const toolsList = [];
+      const enabledAccounts = (accounts || []).filter((a) => a.tools?.is_enabled);
+      if (enabledAccounts.length === 0) {
+        return respond({ success: true, tools: [] });
+      }
 
-      for (const account of accounts) {
-        if (!account.tools?.is_enabled) continue;
+      // Batch the feature and permission lookups (one query each) instead of querying per
+      // account and per feature — the old shape was O(accounts × features) round trips.
+      const toolIds = [...new Set(enabledAccounts.map((a) => a.tool_id))];
+      const accountIds = enabledAccounts.map((a) => a.id);
 
-        // Fetch features of this tool
-        const { data: features } = await supabaseAdmin
+      const [featuresRes, permsRes] = await Promise.all([
+        supabaseAdmin
           .from("tool_features")
-          .select("feature_key, is_enabled")
-          .eq("tool_id", account.tool_id)
-          .eq("is_enabled", true);
+          .select("tool_id, feature_key")
+          .in("tool_id", toolIds)
+          .eq("is_enabled", true),
+        supabaseAdmin
+          .from("agent_tool_permissions")
+          .select("tool_account_id, feature_key")
+          .eq("agent_id", agentId)
+          .in("tool_account_id", accountIds)
+          .eq("allowed", true)
+      ]);
 
-        if (!features || features.length === 0) continue;
+      if (featuresRes.error) throw featuresRes.error;
+      if (permsRes.error) throw permsRes.error;
 
-        const allowedFeatures = [];
-        for (const feat of features) {
-          const perm = await checkAgentToolPermission({
-            agentId,
-            toolAccountId: account.id,
-            featureKey: feat.feature_key
-          });
-          if (perm.allowed) {
-            allowedFeatures.push(feat.feature_key);
-          }
-        }
+      const featuresByTool = new Map();
+      for (const feat of featuresRes.data || []) {
+        if (!featuresByTool.has(feat.tool_id)) featuresByTool.set(feat.tool_id, []);
+        featuresByTool.get(feat.tool_id).push(feat.feature_key);
+      }
+
+      const allowedByAccount = new Set(
+        (permsRes.data || []).map((p) => `${p.tool_account_id}:${p.feature_key}`)
+      );
+
+      const toolsList = [];
+      for (const account of enabledAccounts) {
+        const features = featuresByTool.get(account.tool_id) || [];
+        const allowedFeatures = features.filter((featureKey) =>
+          allowedByAccount.has(`${account.id}:${featureKey}`)
+        );
 
         if (allowedFeatures.length > 0) {
           toolsList.push({
@@ -182,12 +199,24 @@ export async function POST(request) {
         throw new Error("Associated tool is disabled");
       }
 
-      // Check agent permission matrix
-      const permCheck = await checkAgentToolPermission({
-        agentId,
-        toolAccountId: tool_account_id,
-        featureKey: feature_key
-      });
+      // Permission check, rate-limit count, and credentials load are independent — run them in
+      // one parallel round trip instead of three sequential ones.
+      const [permCheck, dailyUsed, credsResult] = await Promise.all([
+        checkAgentToolPermission({
+          agentId,
+          toolAccountId: tool_account_id,
+          featureKey: feature_key
+        }),
+        countDailyUsage({ agentId, apiKeyId, featureKey: feature_key }),
+        supabaseAdmin
+          .from("tool_account_credentials")
+          .select(
+            "encrypted_access_token, encrypted_refresh_token, encrypted_api_key, encrypted_client_secret," +
+            "encrypted_private_key, encrypted_private_key_passphrase, encrypted_password, encrypted_sudo_password"
+          )
+          .eq("tool_account_id", tool_account_id)
+          .maybeSingle()
+      ]);
 
       if (!permCheck.allowed) {
         // Log access denied
@@ -209,13 +238,8 @@ export async function POST(request) {
         return respond({ success: false, error: permCheck.reason || "Permission Denied" }, 403);
       }
 
-      // Check daily rate limit
-      const limitOk = await checkRateLimit({
-        agentId,
-        apiKeyId,
-        featureKey: feature_key,
-        dailyLimit: permCheck.dailyLimit
-      });
+      // Daily rate limit (null count = counting failed; fail safe and allow).
+      const limitOk = dailyUsed === null || dailyUsed < permCheck.dailyLimit;
 
       if (!limitOk) {
         const latencyMs = Math.round(performance.now() - startTime);
@@ -280,15 +304,9 @@ export async function POST(request) {
         });
       }
 
-      // Load connection credentials
-      const { data: creds, error: credsError } = await supabaseAdmin
-        .from("tool_account_credentials")
-        .select(
-          "encrypted_access_token, encrypted_refresh_token, encrypted_api_key, encrypted_client_secret," +
-          "encrypted_private_key, encrypted_private_key_passphrase, encrypted_password, encrypted_sudo_password"
-        )
-        .eq("tool_account_id", tool_account_id)
-        .maybeSingle();
+      // Credentials were loaded in parallel above.
+      if (credsResult.error) throw credsResult.error;
+      const creds = credsResult.data;
 
       // Attach non-sensitive connection metadata so tool handlers can read host/port/username etc.
       toolRecord._connectionMetadata = accountRecord.connection_metadata || {};
