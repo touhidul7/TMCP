@@ -8,7 +8,7 @@ const UpdatePermissionSchema = z.object({
   agentId: z.string().uuid(),
   accountId: z.string().uuid(),
   featureKey: z.string().min(1),
-  field: z.enum(["allowed", "daily_limit", "require_approval"]),
+  field: z.enum(["allowed", "daily_limit", "per_minute_limit", "require_approval"]),
   value: z.any()
 });
 
@@ -32,7 +32,10 @@ export async function POST(request) {
     }
 
     // Prepare row for upsert
-    const dbValue = parsed.field === "daily_limit" ? parseInt(parsed.value) || 0 : parsed.value;
+    // per_minute_limit accepts null/0 to mean "no per-minute cap".
+    const dbValue = parsed.field === "daily_limit" ? parseInt(parsed.value) || 0
+      : parsed.field === "per_minute_limit" ? (parseInt(parsed.value) || null)
+      : parsed.value;
 
     const record = {
       workspace_id: userContext.workspace_id,

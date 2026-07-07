@@ -17,7 +17,7 @@ export async function POST(request) {
     );
   }
 
-  const { workspaceId, agentId, apiKeyId } = agentContext;
+  const { workspaceId, agentId, apiKeyId, scopes } = agentContext;
 
   try {
     reqBody = await request.json();
@@ -95,6 +95,7 @@ export async function POST(request) {
       toolAccountId: resolvedAccountId,
       featureKey: action,
       input,
+      scopes,
       startTime
     });
 

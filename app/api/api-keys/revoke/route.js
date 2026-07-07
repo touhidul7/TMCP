@@ -26,6 +26,14 @@ export async function POST(request) {
 
     if (error) throw error;
 
+    // Revoking a parent also revokes every scoped child key minted from it.
+    const { error: childError } = await supabaseAdmin
+      .from("api_keys")
+      .update({ status: "revoked" })
+      .eq("parent_key_id", parsed.keyId)
+      .eq("workspace_id", userContext.workspace_id);
+    if (childError) console.error("Failed to revoke child keys:", childError);
+
     return NextResponse.json({ success: true, key: data });
 
   } catch (err) {

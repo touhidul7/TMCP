@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { supabaseAdmin } from '@/lib/supabase/admin';
+import { acceptInvitation } from '@/lib/auth/accept-invitation';
 
 export async function GET(request) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
   const next = searchParams.get('next') ?? '/dashboard';
   const inviteToken = searchParams.get('invite');
@@ -11,67 +11,35 @@ export async function GET(request) {
   if (code) {
     const supabase = await createSupabaseServerClient();
     const { data: sessionData, error } = await supabase.auth.exchangeCodeForSession(code);
-    
+
     if (!error && sessionData?.user) {
-      const userId = sessionData.user.id;
-      const userEmail = sessionData.user.email;
-
-      // ── Invite acceptance flow ──────────────────────────────────────
+      // ── Invite acceptance flow (OAuth round trip carried the token) ──
       if (inviteToken) {
-        try {
-          // Look up the pending invitation by token_hash
-          const { data: invitation, error: invErr } = await supabaseAdmin
-            .from('workspace_invitations')
-            .select('*')
-            .eq('token_hash', inviteToken)
-            .eq('status', 'pending')
-            .maybeSingle();
-
-          if (!invErr && invitation) {
-            // Add the user to the workspace as a member with the invited role
-            const { error: memberInsertErr } = await supabaseAdmin
-              .from('workspace_members')
-              .upsert(
-                {
-                  workspace_id: invitation.workspace_id,
-                  user_id: userId,
-                  role: invitation.role,
-                  status: 'active',
-                },
-                { onConflict: 'workspace_id,user_id' }
-              );
-
-            if (!memberInsertErr) {
-              // Mark invitation as accepted
-              await supabaseAdmin
-                .from('workspace_invitations')
-                .update({ status: 'accepted' })
-                .eq('id', invitation.id);
-
-              // Set cookie so the app loads the invited workspace first
-              const response = buildRedirect(request, next);
-              response.cookies.set('tmcp_workspace_id', invitation.workspace_id, {
-                path: '/',
-                maxAge: 60 * 60 * 24 * 30,
-                httpOnly: false,
-                sameSite: 'lax',
-              });
-              return response;
-            } else {
-              console.error('[auth/callback] Failed to insert workspace member:', memberInsertErr);
-            }
-          } else {
-            console.warn('[auth/callback] No pending invitation found for token:', inviteToken);
-          }
-        } catch (e) {
-          console.error('[auth/callback] Invite acceptance error:', e);
+        const workspaceId = await acceptInvitation({ inviteToken, userId: sessionData.user.id });
+        if (workspaceId) {
+          return redirectWithWorkspace(request, next, workspaceId);
         }
       }
-
       return buildRedirect(request, next);
-    } else {
-      console.error('Auth callback error:', error);
     }
+    console.error('Auth callback error:', error);
+  } else if (inviteToken) {
+    // Invite email links land here WITHOUT an OAuth code. If the visitor is already signed in
+    // (cookie session), accept the invite immediately; otherwise send them to the login page
+    // with the token preserved so the OAuth round trip can carry it back to this handler.
+    const supabase = await createSupabaseServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (user) {
+      const workspaceId = await acceptInvitation({ inviteToken, userId: user.id });
+      if (workspaceId) {
+        return redirectWithWorkspace(request, next, workspaceId);
+      }
+      return buildRedirect(request, next);
+    }
+
+    const loginUrl = `/login?invite=${encodeURIComponent(inviteToken)}&next=${encodeURIComponent(next)}`;
+    return buildRedirect(request, loginUrl);
   }
 
   // Return the user to an error page
@@ -79,6 +47,18 @@ export async function GET(request) {
   const isLocalhost = process.env.NODE_ENV === 'development';
   const protocol = isLocalhost ? 'http' : 'https';
   return NextResponse.redirect(`${protocol}://${host}/login?error=auth_failed`);
+}
+
+// Redirect and pin the invited workspace so the app loads it first.
+function redirectWithWorkspace(request, next, workspaceId) {
+  const response = buildRedirect(request, next);
+  response.cookies.set('tmcp_workspace_id', workspaceId, {
+    path: '/',
+    maxAge: 60 * 60 * 24 * 30,
+    httpOnly: false,
+    sameSite: 'lax',
+  });
+  return response;
 }
 
 function buildRedirect(request, next) {

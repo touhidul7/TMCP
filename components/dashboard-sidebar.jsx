@@ -15,6 +15,7 @@ import {
   History,
   FileCheck,
   BarChart3,
+  CalendarClock,
   Settings,
   Plus,
   FileText,
@@ -34,6 +35,7 @@ const iconMap = {
   history_2: History,
   fact_check: FileCheck,
   analytics: BarChart3,
+  schedule: CalendarClock,
   settings: Settings,
   docs: BookOpen,
 };
@@ -53,6 +55,7 @@ export default function DashboardSidebar({ mobile = false, onNavigate }) {
     { name: "Roles", path: "/dashboard/roles", icon: "security", perm: "settings.view" },
     { name: "Logs", path: "/dashboard/logs", icon: "history_2", perm: "logs.view" },
     { name: "Analytics", path: "/dashboard/analytics", icon: "analytics", perm: "logs.view" },
+    { name: "Jobs", path: "/dashboard/jobs", icon: "schedule", perm: "agents.view" },
     { name: "Approvals", path: "/dashboard/approvals", icon: "fact_check", perm: "approvals.view" },
     { name: "Settings", path: "/dashboard/settings", icon: "settings", perm: "settings.view" },
     { name: "Documentation", path: "/docs", icon: "docs", perm: "api_keys.view" },

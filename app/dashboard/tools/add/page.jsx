@@ -56,6 +56,7 @@ export default function AddToolPage() {
   const [rotateAuthType, setRotateAuthType] = useState("bearer"); // bearer, header, query
   const [rotateAuthName, setRotateAuthName] = useState("X-API-KEY");
   const [rotateStatusCodes, setRotateStatusCodes] = useState("401, 402, 403, 429");
+  const [rotateCacheTtl, setRotateCacheTtl] = useState("0");
 
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null); // null, success, error
@@ -131,7 +132,8 @@ export default function AddToolPage() {
         rotate: {
           auth_type: rotateAuthType,
           auth_name: rotateAuthType === "bearer" ? "Authorization" : rotateAuthName,
-          rotate_status_codes: statuses.length ? statuses : [401, 402, 403, 429]
+          rotate_status_codes: statuses.length ? statuses : [401, 402, 403, 429],
+          cache_ttl_seconds: parseInt(rotateCacheTtl, 10) > 0 ? parseInt(rotateCacheTtl, 10) : 0
         }
       };
     } else {
@@ -417,6 +419,21 @@ export default function AddToolPage() {
                   placeholder="401, 402, 403, 429"
                 />
                 <p className="text-[10px] text-on-surface-variant mt-1">Comma-separated HTTP statuses that rotate to the next pool key (4xx/5xx only).</p>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold text-on-surface-variant uppercase font-mono mb-1">Response Cache TTL (seconds)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={rotateCacheTtl}
+                  onChange={(e) => setRotateCacheTtl(e.target.value)}
+                  className="w-full bg-surface-container-lowest border border-outline-variant rounded px-3 py-2 text-xs text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none font-mono"
+                  placeholder="0"
+                />
+                <p className="text-[10px] text-on-surface-variant mt-1">
+                  0 disables. When set, identical requests within the TTL are answered from cache without spending pool quota — only enable for deterministic endpoints (searches, lookups), never for personalized or mutating calls.
+                </p>
               </div>
             </div>
           )}

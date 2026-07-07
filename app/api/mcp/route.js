@@ -74,7 +74,7 @@ export async function DELETE() {
 // ---------------------------------------------------------------------------
 
 async function handleMcpMessage(message, agentContext, startTime) {
-  const { workspaceId, agentId, apiKeyId } = agentContext;
+  const { workspaceId, agentId, apiKeyId, scopes } = agentContext;
   const { id, method, params } = message;
 
   // Notifications (no id) expect no body; 202 Accepted per the Streamable HTTP transport.
@@ -92,7 +92,7 @@ async function handleMcpMessage(message, agentContext, startTime) {
     }
 
     if (method === "tools/list") {
-      const entries = await listAgentMcpTools({ workspaceId, agentId });
+      const entries = await listAgentMcpTools({ workspaceId, agentId, scopes });
       return NextResponse.json(
         rpcResult(id, {
           tools: entries.map(({ name, description, inputSchema }) => ({
@@ -121,7 +121,7 @@ async function handleMcpMessage(message, agentContext, startTime) {
         toolAccountId = explicitAccount;
         featureKey = params?.feature_key || name;
       } else {
-        const entries = await listAgentMcpTools({ workspaceId, agentId });
+        const entries = await listAgentMcpTools({ workspaceId, agentId, scopes });
         const entry = entries.find((e) => e.name === name)
           || (name.includes(".") ? entries.find((e) => e.featureKey === name) : null);
         if (!entry) {
@@ -138,6 +138,7 @@ async function handleMcpMessage(message, agentContext, startTime) {
         toolAccountId,
         featureKey,
         input,
+        scopes,
         startTime
       });
 
@@ -169,12 +170,12 @@ async function handleMcpMessage(message, agentContext, startTime) {
 // ---------------------------------------------------------------------------
 
 async function handleLegacyAction(reqBody, agentContext, startTime) {
-  const { workspaceId, agentId, apiKeyId } = agentContext;
+  const { workspaceId, agentId, apiKeyId, scopes } = agentContext;
   const action = reqBody.action;
 
   if (action === "tools.list") {
     try {
-      const entries = await listAgentMcpTools({ workspaceId, agentId });
+      const entries = await listAgentMcpTools({ workspaceId, agentId, scopes });
 
       // Preserve the original account-grouped response shape.
       const byAccount = new Map();
@@ -216,6 +217,7 @@ async function handleLegacyAction(reqBody, agentContext, startTime) {
       toolAccountId,
       featureKey,
       input,
+      scopes,
       startTime
     });
 

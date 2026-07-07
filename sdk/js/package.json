@@ -1,0 +1,13 @@
+{
+  "name": "tmcp-sdk",
+  "version": "0.1.0",
+  "description": "Zero-dependency JavaScript client for the TMCP Tool Gateway — one API and one key for every connected platform.",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": ["tmcp", "mcp", "gateway", "agents", "api-rotation"],
+  "files": ["index.js", "index.d.ts", "README.md"]
+}

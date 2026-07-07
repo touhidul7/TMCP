@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/require-user";
 import { requirePermission } from "@/lib/auth/require-permission";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { Resend } from "resend";
+import { getEmailSender } from "@/lib/email/resend";
 import { z } from "zod";
 
 const InviteSchema = z.object({
@@ -51,15 +51,14 @@ export async function POST(request) {
       throw inviteError;
     }
 
-    // Initialize Resend
-    const resendKey = process.env.RESEND_API_KEY;
+    // Sender identity comes from RESEND_API_KEY + RESEND_DOMAIN in the environment.
+    const sender = getEmailSender();
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || `http://localhost:3000`;
-    if (resendKey) {
-      const resend = new Resend(resendKey);
+    if (sender) {
       const inviteUrl = `${appUrl}/api/auth/callback?invite=${tokenHash}&next=/dashboard`;
-      
-      await resend.emails.send({
-        from: `TMCP Gateway <tmcp@brittosoft.site>`,
+
+      await sender.resend.emails.send({
+        from: sender.from,
         to: email,
         subject: "You've been invited to join a Workspace on TMCP Gateway",
         html: `

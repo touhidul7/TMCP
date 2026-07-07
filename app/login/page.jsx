@@ -13,12 +13,35 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
 
+  // A pending workspace invitation must survive the OAuth round trip: it is read from the URL
+  // here and appended to the callback redirect, where acceptance happens server-side.
+  const getInviteParams = () => {
+    if (typeof window === "undefined") return { invite: null, next: "/dashboard" };
+    const params = new URLSearchParams(window.location.search);
+    return { invite: params.get("invite"), next: params.get("next") || "/dashboard" };
+  };
+
+  const callbackUrl = () => {
+    const { invite, next } = getInviteParams();
+    const base = `${window.location.origin}/api/auth/callback`;
+    return invite
+      ? `${base}?invite=${encodeURIComponent(invite)}&next=${encodeURIComponent(next)}`
+      : base;
+  };
+
   useEffect(() => {
     let active = true;
 
     const redirectIfSignedIn = (session) => {
       if (!active) return;
       if (session) {
+        // Already signed in with a pending invite: route through the callback so the
+        // invitation is accepted before landing on the dashboard.
+        const { invite, next } = getInviteParams();
+        if (invite) {
+          window.location.assign(`/api/auth/callback?invite=${encodeURIComponent(invite)}&next=${encodeURIComponent(next)}`);
+          return;
+        }
         router.replace("/dashboard");
       } else {
         setCheckingSession(false);
@@ -31,7 +54,7 @@ export default function LoginPage() {
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
-        if (session) router.replace("/dashboard");
+        if (session) redirectIfSignedIn(session);
       }
     );
 
@@ -49,7 +72,7 @@ export default function LoginPage() {
       const { error: oauthErr } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: `${window.location.origin}/api/auth/callback`
+          redirectTo: callbackUrl()
         }
       });
       if (oauthErr) throw oauthErr;
