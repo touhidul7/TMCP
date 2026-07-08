@@ -17,6 +17,7 @@ const DOC_SECTIONS = [
   { id: "examples", label: "Execute Examples" },
   { id: "schemas", label: "Schemas" },
   { id: "rotate", label: "API Key Rotation" },
+  { id: "automation", label: "Keys & Automation" },
   { id: "tools", label: "Tool Reference" }
 ];
 
@@ -320,6 +321,21 @@ export default function PublicDocumentationPage() {
                 auto-selects the provider from the model name (<code className="font-mono text-on-surface">gemini*</code> &rarr; Gemini, otherwise OpenRouter).
               </p>
 
+              <div className="space-y-2 border-t border-outline-variant/40 pt-6">
+                <h3 className="text-sm font-bold text-on-surface">Custom Rotating Proxies (any API)</h3>
+                <p className="max-w-3xl text-xs leading-relaxed text-on-surface-variant">
+                  Beyond the built-in rotators, you can define your <span className="font-semibold text-on-surface">own</span> rotation
+                  gateway for any upstream API: in <span className="font-semibold text-on-surface">Tools → Add Tool → Rotating Proxy</span>,
+                  set the upstream base URL, how the upstream expects its key (Bearer header, custom header, or query parameter),
+                  and which status codes trigger failover. The tool is served at{" "}
+                  <code className="font-mono text-primary">{baseUrl}/api/rotate/{"{slug}"}</code> as a transparent, path-agnostic
+                  proxy — same paths, query, and body as the upstream; TMCP injects a real key from the pool and rotates on failure.
+                  An optional per-tool <span className="font-semibold text-on-surface">Response Cache TTL</span> serves identical
+                  requests from cache without spending pool quota (the built-in Serper Search and embeddings endpoints are cached
+                  by default; cache hits carry an <code className="font-mono text-on-surface">x-tmcp-cache: hit</code> header).
+                </p>
+              </div>
+
               {/* Scrape.do is a query-param proxy API, not OpenAI-compatible — it has its own block. */}
               <div className="space-y-3 border-t border-outline-variant/40 pt-6">
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -392,6 +408,74 @@ export default function PublicDocumentationPage() {
                   <code className="font-mono text-on-surface">401</code>/<code className="font-mono text-on-surface">402</code>/<code className="font-mono text-on-surface">403</code>/<code className="font-mono text-on-surface">429</code> errors.
                 </p>
                 <GatewayCodeTabs snippets={buildSerperRotateSnippets({ baseUrl, basePath: "/api/serper" })} />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="automation" className="mx-auto max-w-7xl scroll-mt-28 px-5 pb-10 lg:px-8">
+          <div className="overflow-hidden rounded border border-outline-variant bg-surface-container">
+            <div className="border-b border-outline-variant bg-surface-container-lowest px-6 py-4">
+              <h2 className="text-sm font-bold text-on-surface">Scoped Keys, Approvals, Scheduled Jobs &amp; SDK</h2>
+              <p className="mt-0.5 text-[10px] font-mono uppercase tracking-wider text-on-surface-variant">
+                Hand out narrow keys, close the approval loop, automate recurring calls, and integrate faster
+              </p>
+            </div>
+            <div className="grid gap-6 p-6 lg:grid-cols-2">
+              <div className="space-y-3 text-xs leading-relaxed text-on-surface-variant">
+                <h3 className="text-sm font-bold text-on-surface">Scoped, expiring child keys</h3>
+                <p>
+                  Mint a key restricted to specific feature keys and a TTL, safe to hand to third-party agents.
+                  Scopes accept exact keys (<code className="font-mono text-on-surface">serper.search</code>) or prefixes
+                  (<code className="font-mono text-on-surface">gmail.*</code>); scoped keys only see and call in-scope tools
+                  (including over MCP), can only mint narrower keys, and are revoked with their parent.
+                </p>
+                <pre className="overflow-x-auto rounded border border-outline-variant bg-surface-container-lowest p-3 text-[10px] leading-relaxed text-on-surface"><code>{`curl -X POST ${baseUrl}/api/gateway/keys/mint \\
+  -H "Authorization: Bearer mcp_live_YOUR_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"features":["serper.search"],"expires_in_seconds":3600}'`}</code></pre>
+
+                <h3 className="pt-2 text-sm font-bold text-on-surface">Rate limits &amp; approvals</h3>
+                <p>
+                  Every permission row supports a daily cap and an optional <span className="font-semibold text-on-surface">per-minute limit</span>{" "}
+                  (enforced atomically — parallel bursts cannot slip through; over-limit calls get{" "}
+                  <code className="font-mono text-on-surface">429</code>). Approval-gated calls return an{" "}
+                  <code className="font-mono text-on-surface">approval_id</code>; poll{" "}
+                  <code className="font-mono text-on-surface">GET /api/gateway/approvals/{"{id}"}</code> to receive the executed
+                  result after an administrator approves it in the dashboard (the owner is notified by email).
+                </p>
+              </div>
+
+              <div className="space-y-3 text-xs leading-relaxed text-on-surface-variant">
+                <h3 className="text-sm font-bold text-on-surface">Scheduled jobs</h3>
+                <p>
+                  The dashboard&apos;s <span className="font-semibold text-on-surface">Jobs</span> page runs any allowed tool
+                  action on an interval (minimum 5 minutes) as a chosen agent + API key — through the same scope, permission,
+                  rate-limit, and audit pipeline as live calls — and delivers the result to a webhook or email. The scheduler
+                  tick is <code className="font-mono text-on-surface">GET /api/cron/run-jobs</code> authorized by{" "}
+                  <code className="font-mono text-on-surface">Bearer CRON_SECRET</code>; drive it from Vercel Cron or any
+                  external scheduler.
+                </p>
+
+                <h3 className="pt-2 text-sm font-bold text-on-surface">OpenAPI &amp; SDK</h3>
+                <p>
+                  <code className="font-mono text-primary">{baseUrl}/api/openapi</code> serves an OpenAPI 3.1 description of
+                  this whole surface for API tooling and SDK generators. A zero-dependency JavaScript client ships in the
+                  repository under <code className="font-mono text-on-surface">sdk/js</code>:
+                </p>
+                <pre className="overflow-x-auto rounded border border-outline-variant bg-surface-container-lowest p-3 text-[10px] leading-relaxed text-on-surface"><code>{`const { TMCPClient } = require("tmcp-sdk");
+const tmcp = new TMCPClient({ baseUrl: "${baseUrl}", apiKey: "mcp_live_..." });
+
+const search = await tmcp.execute({
+  tool: "serper", action: "serper.search",
+  input: { query: "tmcp gateway" }
+});
+
+// approval-gated calls: execute, then poll until decided
+const sent = await tmcp.executeAndWait({
+  tool: "gmail", action: "gmail.send",
+  input: { to: "client@example.com", subject: "Hi", body: "…" }
+});`}</code></pre>
               </div>
             </div>
           </div>
