@@ -57,7 +57,8 @@ export async function POST(request) {
     if (sender) {
       const inviteUrl = `${appUrl}/api/auth/callback?invite=${tokenHash}&next=/dashboard`;
 
-      await sender.resend.emails.send({
+      // Resend's SDK does not throw on failure — it resolves with { data, error }.
+      const { error: sendError } = await sender.resend.emails.send({
         from: sender.from,
         to: email,
         subject: "You've been invited to join a Workspace on TMCP Gateway",
@@ -72,8 +73,18 @@ export async function POST(request) {
           </div>
         `
       });
+
+      if (sendError) {
+        // Remove the pending invitation so the user can retry once the email issue is fixed;
+        // otherwise the unique constraint would block re-inviting the same address.
+        await supabaseAdmin.from("workspace_invitations").delete().eq("id", invite.id);
+        console.error("Resend send failed:", sendError);
+        throw new Error(`Invitation email could not be sent: ${sendError.message || sendError.name || "unknown Resend error"}`);
+      }
     } else {
-      console.warn("RESEND_API_KEY is not set. Skipping email dispatch.");
+      await supabaseAdmin.from("workspace_invitations").delete().eq("id", invite.id);
+      console.warn("RESEND_API_KEY / RESEND_DOMAIN is not set. Skipping email dispatch.");
+      throw new Error("Email is not configured on the server (RESEND_API_KEY / RESEND_DOMAIN missing), so the invitation email was not sent.");
     }
 
     return NextResponse.json({ success: true, invite });
